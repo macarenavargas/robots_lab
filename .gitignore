@@ -1,4 +1,19 @@
+# --- ROS 2 (Archivos temporales y pesados) ---
+# Estos se crean al compilar y no deben subirse
 build/
-devel/
 install/
 log/
+devel/
+
+# --- Python ---
+__pycache__/
+*.pyc
+
+# --- VS Code y Docker ---
+# Ajustes locales que no necesitan tus compañeras
+.vscode/
+.devcontainer/targets/
+
+# --- Archivos de sistema ---
+.DS_Store
+Thumbs.db
