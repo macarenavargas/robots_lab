@@ -50,7 +50,9 @@ class WallFollowerNode(LifecycleNode):
             # Publishers
             # TODO: 2.10. Create the /cmd_vel velocity commands publisher (TwistStamped message).
 
-
+            # Publishers
+            self._publisher_cmd_vel = self.create_publisher(
+            msg_type=TwistStamped, topic="/cmd_vel", qos_profile=10)
             
             # Subscribers
             # TODO: 2.7. Synchronize _compute_commands_callback with /odometry and /scan.
@@ -136,7 +138,15 @@ class WallFollowerNode(LifecycleNode):
 
         """
         # TODO: 2.11. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+        
+        # we will have to modify this when transfering it to the real robot
+        msg = TwistStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.twist.linear.x = v
+        msg.twist.angular.z = w
+
+
+        
         
 
 def main(args=None):
