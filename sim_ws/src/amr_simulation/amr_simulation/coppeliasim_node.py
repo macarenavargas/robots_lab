@@ -68,18 +68,19 @@ class CoppeliaSimNode(LifecycleNode):
 
             # same as the one for the scan topic in the real robot
             qos_profile = QoSProfile(
-                history=QoSHistoryPolicy.UNKNOWN,
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=10, 
                 reliability=QoSReliabilityPolicy.BEST_EFFORT,
                 durability=QoSDurabilityPolicy.VOLATILE,
             )
 
             # publish the robots velocity odometry
-            self.pub_odometry = self.create_publisher(
+            self._publisher_odometry = self.create_publisher(
                 msg_type=Odometry, topic="/odometry", qos_profile=qos_profile
             )
 
             # publish the robots lidar measures
-            self.pub_scan = self.create_publisher(
+            self._publisher_scan = self.create_publisher(
                 msg_type=LaserScan, topic="/scan", qos_profile=qos_profile
             )
 
@@ -251,7 +252,7 @@ class CoppeliaSimNode(LifecycleNode):
         msg.twist.twist.linear.x = z_v
         msg.twist.twist.angular.z = z_w
 
-        self._publisher.publish(msg)
+        self._publisher_odometry.publish(msg)
         self.get_logger().info(
             f"Odometry: v = {msg.twist.twist.linear.x}, w = {msg.twist.twist.angular.z} "
         )
@@ -272,9 +273,9 @@ class CoppeliaSimNode(LifecycleNode):
         msg.time_increment = 0.0004
         msg.scan_time = 0.10
         msg.range_min = 0.0
-        msg.range_max = 100
+        msg.range_max = 100.0
         msg.ranges = z_scan
-        self._publisher.publish(msg)
+        self._publisher_scan.publish(msg)
         self.get_logger().info(f"Scan: zscan = {msg.ranges[:10]}")
 
 

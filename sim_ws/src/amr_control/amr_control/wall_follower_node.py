@@ -52,6 +52,39 @@ class WallFollowerNode(LifecycleNode):
             
             # Subscribers
             # TODO: 2.7. Synchronize _compute_commands_callback with /odometry and /scan.
+            qos_profile = QoSProfile(
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=10, 
+                reliability=QoSReliabilityPolicy.BEST_EFFORT,
+                durability=QoSDurabilityPolicy.VOLATILE,
+            )
+
+            self._subscribers : list [ message_filters . Subscriber ] = []
+            # Append as many topics as needed
+            self._subscribers.append(
+                message_filters.Subscriber (
+                self,
+                msg_type = LaserScan,
+                topic_name = '/scan',
+                qos_profile = qos_profile))
+            
+            self._subscribers.append(
+                message_filters.Subscriber (
+                self,
+                msg_type = Odometry,
+                topic_name = '/odometry',
+                qos_profile = qos_profile))
+            
+            ts = message_filters.ApproximateTimeSynchronizer (
+                self._subscribers,
+                queue_size =10,
+                slop = 9 ) # we will have to change slop to a lower value for the real robot 
+            
+            ts.registerCallback (self._compute_commands_callback )
+
+
+
+
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
             
         except Exception:
