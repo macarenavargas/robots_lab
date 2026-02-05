@@ -86,12 +86,11 @@ class CoppeliaSimNode(LifecycleNode):
 
             # Subscribers
             # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.
+            
+            self._subscribers: list[message_filters.Subscriber] = []
+            self._subscribers.append(message_filters.Subscriber(self, TwistStamped, "/cmd_vel", qos_profile=qos_profile))
 
-            self._suscribers : list[message_filters.Subscriber] = []
-            self._suscribers.append(message_filters.Subscriber (self, TwistStamped, '/cmd_vel', qos_profile = qos_profile))
-
-            ts = message_filters.ApproximateTimeSynchronizer(self._subscribers, queue_size =10, slop =9)
-
+            ts = message_filters.ApproximateTimeSynchronizer(self._subscribers, queue_size=10, slop=9)
             ts.registerCallback(self._next_step_callback)
 
             # TODO: 3.3. Sync the /pose and /cmd_vel subscribers if enable_localization is True.
@@ -140,8 +139,8 @@ class CoppeliaSimNode(LifecycleNode):
         self._check_estimated_pose(pose_msg)
 
         # TODO: 2.13. Parse the velocities from the TwistStamped message (i.e., read v and w).
-        v: float = 0.0
-        w: float = 0.0
+        v: float = cmd_vel_msg.twist.linear.x
+        w: float = cmd_vel_msg.twist.angular.z
 
         # Execute simulation step
         self._robot.move(v, w)
