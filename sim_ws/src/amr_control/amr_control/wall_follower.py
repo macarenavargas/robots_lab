@@ -1,3 +1,6 @@
+from enum import Enum, auto
+
+
 class WallFollower:
     """Class to safely explore an environment (without crashing) when the pose is unknown."""
 
@@ -8,7 +11,12 @@ class WallFollower:
     TRACK = 0.16  # Distance between same axle wheels [m]
     WHEEL_RADIUS = 0.033  # Radius of the wheels [m]
     WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS  # Maximum motor angular speed [rad/s]
-    
+
+    class State(Enum):
+        STOPPED = auto()
+        MOVE_STRAIGHT = auto()
+        TURN = auto()
+
     def __init__(self, dt: float, logger=None, simulation: bool = False) -> None:
         """Wall following class initializer.
 
@@ -21,7 +29,9 @@ class WallFollower:
         self._dt: float = dt
         self._logger = logger
         self._simulation: bool = simulation
-        
+        self._state = self.State.STOPPED
+        self._turn_direction = 0.0
+
     def compute_commands(self, z_scan: list[float], z_v: float, z_w: float) -> tuple[float, float]:
         """Wall following exploration algorithm.
 
@@ -37,8 +47,32 @@ class WallFollower:
 
         """
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
-        v = 0.15
-        w = 0.0
-        
+
+        front_values = z_scan[-5:] + z_scan[:5]
+        min_front = min(front_values)
+        left_side_values = z_scan[55:65]
+        right_side_values = z_scan[175:185]
+
+        if self._state == self.State.STOPPED:
+            v = 0.0
+            w = 0.0
+            self._state = self.State.MOVE_STRAIGHT
+
+        elif self._state == self.State.MOVE_STRAIGHT:
+            v = 0.15
+            w = 0.0
+            if min_front < 0.3:
+                self._state = self.State.TURN
+                if min(right_side_values) < min(left_side_values):
+                    self._turn_direction = -0.5
+                else:
+                    self._turn_direction = 0.5
+
+        elif self._state == self.State.TURN:
+            v = 0.0
+            w = self._turn_direction
+
+            if min_front > 0.65:
+                self._state = self.State.MOVE_STRAIGHT
+
         return v, w
-    
