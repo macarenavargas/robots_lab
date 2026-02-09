@@ -44,7 +44,7 @@ class WallFollowerNode(LifecycleNode):
             self._wall_follower = WallFollower(
                 dt,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
 
             # Publishers
@@ -123,7 +123,7 @@ class WallFollowerNode(LifecycleNode):
 
             # Execute wall follower
             v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
-            self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
+            #self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
 
             # Publish
             self._publish_velocity_commands(v, w)
