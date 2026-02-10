@@ -246,6 +246,9 @@ class WallFollower:
             v = 0.08
             w = 0.45 * self._side_sign
             self._prev_error = 0.0
+        
+        if not self._simulation:
+            w = -w
 
         return v, w
 

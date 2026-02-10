@@ -51,9 +51,16 @@ class WallFollowerNode(LifecycleNode):
             # TODO: 2.10. Create the /cmd_vel velocity commands publisher (TwistStamped message).
 
             # Publishers
-            self._publisher_cmd_vel = self.create_publisher(
-                msg_type=TwistStamped, topic="/cmd_vel", qos_profile=10
-            )
+            if self._simulation:
+                self._publisher_cmd_vel = self.create_publisher(
+                    msg_type=TwistStamped, topic="/cmd_vel", qos_profile=10
+                )
+
+            else:
+                self._publisher_cmd_vel = self.create_publisher(
+                    msg_type=Twist, topic="/cmd_vel", qos_profile=10
+                )
+
 
             # Subscribers
             # TODO: 2.7. Synchronize _compute_commands_callback with /odometry and /scan.
@@ -75,6 +82,7 @@ class WallFollowerNode(LifecycleNode):
                 message_filters.Subscriber(self, LaserScan, "/scan", qos_profile=qos_profile)
             )
 
+            
             ts = message_filters.ApproximateTimeSynchronizer(
                 self._subscribers, queue_size=10, slop=9
             )  # we will have to change slop to a lower value for the real robot
@@ -138,9 +146,15 @@ class WallFollowerNode(LifecycleNode):
         """
         # TODO: 2.11. Complete the function body with your code (i.e., replace the pass statement).
 
+        msg = None
         # we will have to modify this when transfering it to the real robot
-        msg = TwistStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
+        if self._simulation:
+            msg = TwistStamped()
+            msg.header.stamp = self.get_clock().now().to_msg()
+        
+        else:
+            msg = Twist()
+
         msg.twist.linear.x = v
         msg.twist.angular.z = w
 
