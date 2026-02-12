@@ -48,8 +48,12 @@ class WallFollower:
         self._side_sign = 1  # 1 = Right, -1 = Left
         self._angle_turned = 0.0  # used to acumulate angle to know how much the robot has turned
 
-        self.K_p = 5
-        self.K_d = 3.5
+        if simulation:
+            self.K_p = 1.2    
+            self.K_d = 0.9
+        else:
+            self.K_p = 5
+            self.K_d = 3.5
         self._prev_error = 0.0
 
         self._dist_ref = 0.2
@@ -87,15 +91,19 @@ class WallFollower:
         )
 
         # state machine logic: definition of each state
-        v, w = self._compute_actions_based_on_state(distance_to_current_wall)
-
+        v_cmd, w_cmd= self._compute_actions_based_on_state(distance_to_current_wall)
         # contrains to respect the phisical limits of the robot
-        v, w = self._saturate_commands(v, w)
+        v, w = self._saturate_commands(v_cmd, w_cmd)
 
         if self._logger is not None:
             self._logger.info(
                 f"[{self._state.name}] Side:{'R' if self._side_sign == 1 else 'L'} | Front:{d_front:.2f} | Right:{d_right:.2f} |  Left: {d_left:.2f} | w:{w:.2f}"
             )
+
+
+        if not self._simulation:
+            w = -w
+
         return v, w
 
     def _clean_lidar_data(self, z_scan: list[float]) -> list[float]:
@@ -180,36 +188,35 @@ class WallFollower:
             return
 
         # ---  Side Switching ---
-        # if distance to current wall is greater than distance to the other wall -> switch
-        if distance_to_current_wall > distance_to_other_wall:
-            if not self._simulation and self._state != State.CORNER:
+        # block change if the robot is turning
+        if self._state != State.CORNER:
+            # if distance to current wall is greater than distance to the other wall -> switch
+            if distance_to_current_wall > distance_to_other_wall: 
+                
                 self._side_sign *= -1
                 self._prev_error = 0.0
                 self._state = State.FOLLOW_WALL
-            if self._simulation:
-                self._side_sign *= -1
-                self._prev_error = 0.0
-                self._state = State.FOLLOW_WALL
-            return
+                return
 
         # --- State Transitions ---
         if self._state == State.CORNER:
-            # robot has tu turn 90º before veign allowed to exir this state
+            # robot has tu turn 90º before beign allowed to exir this state
             if self._simulation:
                 self._angle_turned += abs(z_w) * self._dt
             else:
-                w_cmd = -0.5 * self._side_sign
-                self._angle_turned += abs(w_cmd) * self._dt
+                self._angle_turned += 0.5 * self._dt
+            
             if self._angle_turned >= self.TURN_ANGLE_TARGET:
                 self._state = State.FIND_WALL
                 self._prev_error = 0.0
                 self._angle_turned = 0.0
         else:
             if d_front < self.MAX_FRONT_DISTANCE:
-                if d_left < d_right:
-                    self._side_sign = -1
-                else:
-                    self._side_sign = 1
+                # last check before turning?
+                # if d_left < d_right:
+                #     self._side_sign = -1
+                # else:
+                #     self._side_sign = 1
                 
                 self._state = State.CORNER
                 self._angle_turned = 0.0  # Reset integrator
