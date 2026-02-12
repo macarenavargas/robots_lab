@@ -5,12 +5,13 @@ import math
 
 
 def generate_launch_description():
-    simulation = True # change manually to execute in real world
-    # start = (1.0, -1.0, 0.5 * math.pi)  # Outer corridor
-    start = (0.6, -0.6, 1.5 * math.pi)  # Inner corridor
-    # start = (0.90, -1.0, 0.5 * math.pi) # close to wall
+    simulation = False # change manually to execute in real world
+    
 
     if simulation:
+        # start = (1.0, -1.0, 0.5 * math.pi)  # Outer corridor
+        start = (0.6, -0.6, 1.5 * math.pi)  # Inner corridor
+        # start = (0.90, -1.0, 0.5 * math.pi) # close to wall
         wall_follower_node = LifecycleNode(
             package="amr_control",
             executable="wall_follower",
@@ -69,7 +70,13 @@ def generate_launch_description():
                 "--log-level",
                 "INFO",
             ],  # (WARN before) Allow wal follower to publish info logs
-            parameters=[{"simulation": simulation}],
+            parameters=[{
+                "simulation": simulation,
+                
+            }],
+
+
+
         )
 
        
@@ -81,10 +88,7 @@ def generate_launch_description():
             arguments=["--ros-args", "--log-level", "WARN"],
             parameters=[
                 {
-                    "node_startup_order": (
-                        "wall_follower",
-                        #"coppeliasim",  # no coppeliasim in real world
-                    )
+                    "node_startup_order": ["wall_follower"]
                 }
             ],
         )

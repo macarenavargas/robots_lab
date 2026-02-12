@@ -19,9 +19,12 @@ class WallFollowerNode(LifecycleNode):
         super().__init__("wall_follower")
 
         # Parameters
-        self.declare_parameter("dt", 0.05)
+        self.declare_parameter("dt", 0.1) # simulation 0.05
         self.declare_parameter("enable_localization", False)
         self.declare_parameter("simulation", False)
+
+    
+
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -46,6 +49,12 @@ class WallFollowerNode(LifecycleNode):
                 simulation=self._simulation,
                 logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
+
+
+            # --- Variables to register for non-simulation mode---
+            self._last_z_v = None
+            self._last_z_w = None
+            self._last_z_scan = None
 
             # Publishers
             # TODO: 2.10. Create the /cmd_vel velocity commands publisher (TwistStamped message).
@@ -83,11 +92,25 @@ class WallFollowerNode(LifecycleNode):
             )
 
             
-            ts = message_filters.ApproximateTimeSynchronizer(
-                self._subscribers, queue_size=10, slop=9
-            )  # we will have to change slop to a lower value for the real robot
+            ts = None 
 
-            ts.registerCallback(self._compute_commands_callback)
+            if self._simulation: 
+                ts = message_filters.ApproximateTimeSynchronizer(
+                self._subscribers, queue_size=10, slop=9
+                )  # we will have to change slop to a lower value for the real robot
+
+                ts.registerCallback(self._compute_commands_callback)
+
+
+            else: 
+                ts = message_filters.ApproximateTimeSynchronizer(
+                self._subscribers, queue_size=10, slop=0.15) # much smaller value 
+                ts.registerCallback(self._capture_measurements_callback)
+                self._timer = self.create_timer(dt, self._compute_commands_timer)
+
+
+
+           
 
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
 
@@ -107,6 +130,47 @@ class WallFollowerNode(LifecycleNode):
         self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
+
+
+
+    def _capture_measurements_callback(
+        self, odom_msg: Odometry, scan_msg: LaserScan, pose_msg: PoseStamped = PoseStamped()
+    ): 
+        
+        # the first callback in non-simulation
+        if not pose_msg.localized:
+          
+            self._last_z_v: float = odom_msg.twist.twist.linear.x
+            self._last_z_w: float = odom_msg.twist.twist.angular.z
+
+            self._last_z_scan: list[float] = scan_msg.ranges
+
+
+
+    def _compute_commands_timer(self, ): 
+         
+        
+        if (
+        self._last_z_v is None
+        or self._last_z_w is None
+        or self._last_z_scan is None
+        ):
+            return
+
+        z_v: float = self._last_z_v
+        z_w: float = self._last_z_w
+        z_scan: list[float] = self._last_z_scan
+
+        # Execute wall follower
+        v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
+        #self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
+
+        # Publish
+        self._publish_velocity_commands(v, w)
+
+        
+
+
 
     def _compute_commands_callback(
         self, odom_msg: Odometry, scan_msg: LaserScan, pose_msg: PoseStamped = PoseStamped()
@@ -151,12 +215,15 @@ class WallFollowerNode(LifecycleNode):
         if self._simulation:
             msg = TwistStamped()
             msg.header.stamp = self.get_clock().now().to_msg()
+            msg.twist.linear.x = v
+            msg.twist.angular.z = w
         
         else:
             msg = Twist()
+            msg.linear.x = v
+            msg.angular.z = - w # (-) because the robot is dextr.
 
-        msg.twist.linear.x = v
-        msg.twist.angular.z = w
+     
 
         self._publisher_cmd_vel.publish(msg)
 
