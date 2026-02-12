@@ -24,7 +24,7 @@ class WallFollower:
     # Navigation Threshold
     DIST_REF = 0.2  # Target distance to wall [m]
     VEL_REF = 0.15  # Target linear velocity [m/s]
-    MAX_FRONT_DISTANCE = 0.2  # Front distance to trigger corner [m]
+    MAX_FRONT_DISTANCE = 0.25  # Front distance to trigger corner [m]
     WALL_LOST_VAL = 1.2  # Distance to consider wall lost [m]
     WALL_FOUND_VAL = 0.8  # Distance to consider new wall found [m]
     TURN_ANGLE_TARGET = (
@@ -48,8 +48,8 @@ class WallFollower:
         self._side_sign = 1  # 1 = Right, -1 = Left
         self._angle_turned = 0.0  # used to acumulate angle to know how much the robot has turned
 
-        self.K_p = 1.2
-        self.K_d = 0.9
+        self.K_p = 5
+        self.K_d = 3.5
         self._prev_error = 0.0
 
         self._dist_ref = 0.2
@@ -182,29 +182,46 @@ class WallFollower:
         # ---  Side Switching ---
         # if distance to current wall is greater than distance to the other wall -> switch
         if distance_to_current_wall > distance_to_other_wall:
-            self._side_sign *= -1
-            self._prev_error = 0.0
-            self._state = State.FOLLOW_WALL
+            if not self._simulation and self._state != State.CORNER:
+                self._side_sign *= -1
+                self._prev_error = 0.0
+                self._state = State.FOLLOW_WALL
+            if self._simulation:
+                self._side_sign *= -1
+                self._prev_error = 0.0
+                self._state = State.FOLLOW_WALL
             return
 
         # --- State Transitions ---
         if self._state == State.CORNER:
             # robot has tu turn 90º before veign allowed to exir this state
-            self._angle_turned += abs(z_w) * self._dt
+            if self._simulation:
+                self._angle_turned += abs(z_w) * self._dt
+            else:
+                w_cmd = -0.5 * self._side_sign
+                self._angle_turned += abs(w_cmd) * self._dt
             if self._angle_turned >= self.TURN_ANGLE_TARGET:
                 self._state = State.FIND_WALL
                 self._prev_error = 0.0
                 self._angle_turned = 0.0
         else:
             if d_front < self.MAX_FRONT_DISTANCE:
+                if d_left < d_right:
+                    self._side_sign = -1
+                else:
+                    self._side_sign = 1
+                
                 self._state = State.CORNER
                 self._angle_turned = 0.0  # Reset integrator
+                self._prev_error = 0.0
+                return
+
             elif distance_to_current_wall < 1.0:
                 # if the robot is not near a front wall, and it can detect a side wall
                 self._state = State.FOLLOW_WALL
             else:
                 self._state = State.FIND_WALL
-
+        return 
     def _compute_actions_based_on_state(
         self, distance_to_current_wall: float
     ) -> tuple[float, float]:
