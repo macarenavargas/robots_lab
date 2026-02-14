@@ -123,6 +123,14 @@ class WallFollower:
             else:
                 clean_scan.append(r)
         return clean_scan
+    
+
+    def _get_robust_min(self,values):
+            if not values: 
+                return self.SENSOR_RANGE_MAX
+            k = min(len(values), 5) 
+            sorted_vals = sorted(values)
+            return sum(sorted_vals[:k]) /k
 
     def _get_sensor_readings(self, scan: list[float]) -> tuple[float, float, float]:
         """Extracts specific ranges of distance from the Lidar scan.
@@ -161,13 +169,13 @@ class WallFollower:
             front_width = int(FRONT_APERTURE * rays_per_degree)
 
             fw = max(1, front_width)
-            d_front = min(scan[-fw:] + scan[:fw])
+            d_front = self._get_robust_min(scan[-fw:] + scan[:fw])
 
             idx_left = int(n / 4)
-            d_left = min(scan[idx_left - side_width : idx_left + side_width])
+            d_left = self._get_robust_min(scan[idx_left - side_width : idx_left + side_width])
 
             idx_right = int(3 * n / 4)
-            d_right = min(scan[idx_right - side_width : idx_right + side_width])
+            d_right = self._get_robust_min(scan[idx_right - side_width : idx_right + side_width])
             return d_front, d_left, d_right
 
     def _get_wall_distances(self, d_left: float, d_right: float) -> tuple[float, float]:
@@ -248,11 +256,14 @@ class WallFollower:
         else:
             if d_front < self.MAX_FRONT_DISTANCE:
                 # last check before turning?
-                # if d_left < d_right:
-                #     self._side_sign = -1
-                # else:
-                #     self._side_sign = 1
-                
+                # # Antes de girar a ciegas, miramos qué lado tiene más hueco REALMENTE
+                # if not self._simulation:
+                #     if d_left < d_right:
+                #         # Si hay menos hueco a la izq, la pared está a la izq -> sigo izq -> giro derecha
+                #         self._side_sign = -1 
+                #     else:
+                #         # Si hay menos hueco a la der, la pared está a la der -> sigo der -> giro izquierda
+                #         self._side_sign = 1
                 self._state = State.CORNER
                 self._angle_turned = 0.0  # Reset integrator
                 self._prev_error = 0.0
