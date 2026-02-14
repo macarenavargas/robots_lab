@@ -218,9 +218,16 @@ class WallFollower:
         # ---  Side Switching ---
         # block change if the robot is turning
         if self._state != State.CORNER:
-            # if distance to current wall is greater than distance to the other wall -> switch
-            if distance_to_current_wall > distance_to_other_wall: 
-                
+            should_switch = False
+            if self._simulation:
+                if distance_to_current_wall > distance_to_other_wall:
+                    should_switch = True
+            else:
+                # only switches wall if the other wall is clearly a better option to follow
+                if (distance_to_current_wall > 0.5) and (distance_to_other_wall < (distance_to_current_wall - 0.2)):
+                    should_switch = True
+
+            if should_switch:
                 self._side_sign *= -1
                 self._prev_error = 0.0
                 self._state = State.FOLLOW_WALL
