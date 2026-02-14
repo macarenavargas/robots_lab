@@ -136,11 +136,39 @@ class WallFollower:
                 d_right: Distance to the closest obstacle on the right [m].
         """
 
-        d_right = min(scan[160:200])  # values we use to detect how far the right wall is
-        d_front = min(scan[-5:] + scan[:5])  # values to detect the front
-        d_left = min(scan[40:80])
+    
+        if self._simulation:
+            d_right = min(scan[160:200])
+            d_front = min(scan[-5:] + scan[:5])
+            d_left = min(scan[40:80])
+            return d_front, d_left, d_right
 
-        return d_front, d_left, d_right
+        else:
+            n = len(scan)
+            if n == 0: 
+                return self.SENSOR_RANGE_MAX, self.SENSOR_RANGE_MAX, self.SENSOR_RANGE_MAX 
+
+            
+            #  +/- 20 degrees range for left and right
+            SIDE_APERTURE = 20  
+            #  +/- 10 degree range for front
+            FRONT_APERTURE = 10 
+
+            # convert degrees into number of indexes/ lidar rays"
+            rays_per_degree = n / 360.0
+            
+            side_width = int(SIDE_APERTURE * rays_per_degree)
+            front_width = int(FRONT_APERTURE * rays_per_degree)
+
+            fw = max(1, front_width)
+            d_front = min(scan[-fw:] + scan[:fw])
+
+            idx_left = int(n / 4)
+            d_left = min(scan[idx_left - side_width : idx_left + side_width])
+
+            idx_right = int(3 * n / 4)
+            d_right = min(scan[idx_right - side_width : idx_right + side_width])
+            return d_front, d_left, d_right
 
     def _get_wall_distances(self, d_left: float, d_right: float) -> tuple[float, float]:
         """Determines distances to the followed wall and the opposite wall.
