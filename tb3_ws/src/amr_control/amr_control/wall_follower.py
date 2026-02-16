@@ -29,7 +29,7 @@ class WallFollower:
     WALL_FOUND_VAL = 0.8  # Distance to consider new wall found [m]
     TURN_ANGLE_TARGET = (
         math.pi / 2
-    ) - 0.1  # Angle the rpbot has to tu acomploish when in enters corner state
+    )   # Angle the rpbot has to tu acomploish when in enters corner state
 
     def __init__(self, dt: float, logger=None, simulation: bool = False) -> None:
         """Wall following class initializer.
@@ -52,8 +52,9 @@ class WallFollower:
             self.K_p = 1.2    
             self.K_d = 0.9
         else:
-            self.K_p = 5
-            self.K_d = 3.5
+            self.K_p = 6
+            self.K_d = 5.5
+
         self._prev_error = 0.0
 
         self._dist_ref = 0.2
@@ -160,7 +161,7 @@ class WallFollower:
             #  +/- 20 degrees range for left and right
             SIDE_APERTURE = 20  
             #  +/- 10 degree range for front
-            FRONT_APERTURE = 10 
+            FRONT_APERTURE = 5 
 
             # convert degrees into number of indexes/ lidar rays"
             rays_per_degree = n / 360.0
@@ -232,7 +233,9 @@ class WallFollower:
                     should_switch = True
             else:
                 # only switches wall if the other wall is clearly a better option to follow
-                if (distance_to_current_wall > 0.5) and (distance_to_other_wall < (distance_to_current_wall - 0.2)):
+                HYSTERESIS = 0.1 # 0.05 
+                
+                if distance_to_other_wall < (distance_to_current_wall - HYSTERESIS):
                     should_switch = True
 
             if should_switch:
