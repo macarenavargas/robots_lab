@@ -52,8 +52,9 @@ class WallFollower:
             self.K_p = 1.2    
             self.K_d = 0.9
         else:
-            self.K_p = 6
-            self.K_d = 5.5
+            # too high!! try Kp 3 to 5
+            self.K_p = 6 # 2
+            self.K_d = 5 # 1
 
         self._prev_error = 0.0
 
@@ -116,22 +117,35 @@ class WallFollower:
         Returns:
             A clean list of distances.
         """
-        clean_scan = []
-        for r in z_scan:
-            if math.isnan(r) or math.isinf(r) or r == 0.0:
-                # if we get any value that doesnt make sense we set it to the senor max
-                clean_scan.append(self.SENSOR_RANGE_MAX)
-            else:
-                clean_scan.append(r)
-        return clean_scan
+
+        if self._simulation:
+            clean_scan = []
+            for r in z_scan:
+                if math.isnan(r) or math.isinf(r) or r == 0.0:
+                    # if we get any value that doesnt make sense we set it to the senor max
+                    clean_scan.append(self.SENSOR_RANGE_MAX)
+                else:
+                    clean_scan.append(r)
+            return clean_scan
+        else:
+            return list(z_scan)
+        
     
 
-    def _get_robust_min(self,values):
-            if not values: 
-                return self.SENSOR_RANGE_MAX
-            k = min(len(values), 5) 
-            sorted_vals = sorted(values)
-            return sum(sorted_vals[:k]) /k
+    def _get_robust_min(self, values: list[float]) -> float:
+       
+        if self._simulation:
+            valid_values = values
+        else:
+            valid_values = [v for v in values if not math.isnan(v) and not math.isinf(v) and v > 0.0]
+        
+  
+        if not valid_values: 
+            return self.SENSOR_RANGE_MAX
+        
+        k = min(len(valid_values), 5) 
+        sorted_vals = sorted(valid_values)
+        return sum(sorted_vals[:k]) / k
 
     def _get_sensor_readings(self, scan: list[float]) -> tuple[float, float, float]:
         """Extracts specific ranges of distance from the Lidar scan.
@@ -159,7 +173,7 @@ class WallFollower:
 
             
             #  +/- 20 degrees range for left and right
-            SIDE_APERTURE = 20  
+            SIDE_APERTURE = 20
             #  +/- 10 degree range for front
             FRONT_APERTURE = 5 
 
@@ -233,13 +247,15 @@ class WallFollower:
                     should_switch = True
             else:
                 # only switches wall if the other wall is clearly a better option to follow
-                HYSTERESIS = 0.1 # 0.05 
+                HYSTERESIS = 0.1 # 
                 
                 if distance_to_other_wall < (distance_to_current_wall - HYSTERESIS):
                     should_switch = True
 
             if should_switch:
-                self._side_sign *= -1
+                self._side_sign *= -1 
+
+                
                 self._prev_error = 0.0
                 self._state = State.FOLLOW_WALL
                 return
@@ -259,14 +275,14 @@ class WallFollower:
         else:
             if d_front < self.MAX_FRONT_DISTANCE:
                 # last check before turning?
-                # # Antes de girar a ciegas, miramos qué lado tiene más hueco REALMENTE
-                # if not self._simulation:
-                #     if d_left < d_right:
-                #         # Si hay menos hueco a la izq, la pared está a la izq -> sigo izq -> giro derecha
-                #         self._side_sign = -1 
-                #     else:
-                #         # Si hay menos hueco a la der, la pared está a la der -> sigo der -> giro izquierda
-                #         self._side_sign = 1
+                # Antes de girar a ciegas, miramos qué lado tiene más hueco REALMENTE
+                if not self._simulation:
+                    if d_left < d_right:
+                        # Si hay menos hueco a la izq, la pared está a la izq -> sigo izq -> giro derecha
+                        self._side_sign = -1 
+                    elif d_left > d_right:
+                        # Si hay menos hueco a la der, la pared está a la der -> sigo der -> giro izquierda
+                        self._side_sign = 1
                 self._state = State.CORNER
                 self._angle_turned = 0.0  # Reset integrator
                 self._prev_error = 0.0
@@ -310,8 +326,19 @@ class WallFollower:
             error = self.DIST_REF - distance_to_current_wall
 
             derivative = (error - self._prev_error) / self._dt
+            # w = -self._side_sign * (self.K_p * error + self.K_d * derivative)
+            pid_output = -self._side_sign * (self.K_p * error + self.K_d * derivative)
 
-            w = -self._side_sign * (self.K_p * error + self.K_d * derivative)
+
+            PID_LIMIT = 0.5 
+            
+            if pid_output > PID_LIMIT:
+                w = PID_LIMIT
+            elif pid_output < -PID_LIMIT:
+                w = -PID_LIMIT
+            else:
+                w = pid_output
+
             self._prev_error = error
 
         elif self._state == State.FIND_WALL:
@@ -341,7 +368,7 @@ class WallFollower:
         w_limit = (self.WHEEL_SPEED_MAX * r - abs(v)) / b
 
         if abs(w) > w_limit:
-            # prioritize angular velocity, reduce linear velocity
+            # prioritize angular velo   city, reduce linear velocity
             v_altered = (self.WHEEL_SPEED_MAX * r) - (abs(w) * b)
 
             if v_altered < 0:
