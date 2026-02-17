@@ -95,6 +95,13 @@ class ParticleFilterNode(LifecycleNode):
             # Publishers
             # TODO: 3.1. Create the /pose publisher (PoseStamped message).
             
+            self._publisher_pose = self.create_publisher(
+			    msg_type = PoseStamped, 
+                topic="/pose", 
+                qos_profile= 10
+		    )
+        
+            
             # Subscribers
             scan_qos_profile = QoSProfile(
                 history=QoSHistoryPolicy.KEEP_LAST,
@@ -207,7 +214,28 @@ class ParticleFilterNode(LifecycleNode):
 
         """
         # TODO: 3.2. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+        
+        msg = PoseStamped()
+
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "map"
+
+        msg.pose.position.x = x_h
+        msg.pose.position.y = y_h    
+        msg.pose.position.z = 0 
+
+        qw, qx, qy, qz = euler2quat(0.0, 0.0, float(theta_h))
+        msg.pose.orientation.x = qx 
+        msg.pose.orientation.y = qy
+        msg.pose.orientation.z = qz
+        msg.pose.orientation.w = qw
+
+
+        if self._localized : 
+            
+               
+            self._publisher_pose.publish(msg)
+
         
 
 def main(args=None):

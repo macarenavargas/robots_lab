@@ -210,9 +210,40 @@ class ParticleFilter:
 
         """
         particles = np.empty((particle_count, 3), dtype=object)
+        valid_orientations = [0, math.pi/2, math.pi, math.pi * 3 / 2 ]
+        x_min, y_min, x_max, y_max = self._map.bounds()
 
         # TODO: 3.4. Complete the missing function body with your code.
+
+        num_particled_created = 0 
         
+
+        while num_particled_created< particle_count: 
+
+            if global_localization: 
+                # every point of the map is equally probable. 
+                x = random.uniform(x_min, x_max)
+                y = random.uniform(y_min, y_max)
+                theta =  random.choice(valid_orientations)
+            
+            else:  # we make a gaussian distribution centered on the estimated position of the robot 
+                # and with the indicated desviation 
+                x =  np.random.normal(initial_pose[0], initial_pose_sigma[0])
+                y =  np.random.normal(initial_pose[1], initial_pose_sigma[1])
+                theta = np.random.normal(initial_pose[2], initial_pose_sigma[2])
+                
+
+
+            if self._map.contains((x,y)): 
+                particles[num_particled_created, 0] = x
+                particles[num_particled_created, 1] = y
+                particles[num_particled_created, 2] = theta 
+                num_particled_created +=1 
+
+
+
+            
+    
         return particles
 
     def _sense(self, pose: tuple[float, float, float]) -> list[float]:

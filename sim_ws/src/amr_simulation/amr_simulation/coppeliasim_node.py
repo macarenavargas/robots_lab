@@ -31,6 +31,9 @@ class CoppeliaSimNode(LifecycleNode):
         )
         self.declare_parameter("start", (0.0, 0.0, 0.0))
 
+
+        
+
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
 
@@ -87,21 +90,25 @@ class CoppeliaSimNode(LifecycleNode):
             # Subscribers
             # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.
 
-            self._subscriber_cmd_vel = self.create_subscription(
-                msg_type=TwistStamped,
-                topic="/cmd_vel",
-                callback=lambda msg: self._next_step_callback(msg),
-                qos_profile=10,
-            )
 
-            # self._subscribers: list[message_filters.Subscriber] = []
-            # self._subscribers.append(message_filters.Subscriber(self, TwistStamped, "/cmd_vel", qos_profile=qos_profile))
+            if not enable_localization: 
+                self._subscriber_cmd_vel = self.create_subscription(
+                    msg_type=TwistStamped,
+                    topic="/cmd_vel",
+                    callback=lambda msg: self._next_step_callback(msg),
+                    qos_profile=10,
+                )
 
-            # ts = message_filters.ApproximateTimeSynchronizer(self._subscribers, queue_size=10, slop=9)
-            # ts.registerCallback(self._next_step_callback)
+            else: 
+                
 
-            # TODO: 3.3. Sync the /pose and /cmd_vel subscribers if enable_localization is True.
-
+                # TODO: 3.3. Sync the /pose and /cmd_vel subscribers if enable_localization is True.
+                self._subscribers: list[message_filters.Subscriber] = []
+                self._subscribers.append(message_filters.Subscriber(self, TwistStamped, "/cmd_vel", qos_profile=qos_profile))
+                self._subscribers.append(message_filters.Subscriber(self, PoseStamped, "/pose", qos_profile = 10 ))
+                
+                ts = message_filters.ApproximateTimeSynchronizer(self._subscribers, queue_size=10, slop=9) # maybe change slope in real life? 
+                ts.registerCallback(self._next_step_callback)
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR
