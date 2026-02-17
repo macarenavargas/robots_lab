@@ -24,12 +24,12 @@ class WallFollower:
     # Navigation Threshold
     DIST_REF = 0.2  # Target distance to wall [m]
     VEL_REF = 0.15  # Target linear velocity [m/s]
-    MAX_FRONT_DISTANCE = 0.2  # Front distance to trigger corner [m]
+    MAX_FRONT_DISTANCE = 0.25  # Front distance to trigger corner [m]
     WALL_LOST_VAL = 1.2  # Distance to consider wall lost [m]
     WALL_FOUND_VAL = 0.8  # Distance to consider new wall found [m]
     TURN_ANGLE_TARGET = (
         math.pi / 2
-    ) - 0.1  # Angle the rpbot has to tu acomploish when in enters corner state
+    )   # Angle the rpbot has to tu acomploish when in enters corner state
 
     def __init__(self, dt: float, logger=None, simulation: bool = False) -> None:
         """Wall following class initializer.
@@ -48,8 +48,14 @@ class WallFollower:
         self._side_sign = 1  # 1 = Right, -1 = Left
         self._angle_turned = 0.0  # used to acumulate angle to know how much the robot has turned
 
-        self.K_p = 1.2
-        self.K_d = 0.9
+        if simulation:
+            self.K_p = 1.2    
+            self.K_d = 0.9
+        else:
+            # too high!! try Kp 3 to 5
+            self.K_p = 6 # 2
+            self.K_d = 5 # 1
+
         self._prev_error = 0.0
 
         self._dist_ref = 0.2
@@ -87,15 +93,19 @@ class WallFollower:
         )
 
         # state machine logic: definition of each state
-        v, w = self._compute_actions_based_on_state(distance_to_current_wall)
-
+        v_cmd, w_cmd= self._compute_actions_based_on_state(distance_to_current_wall)
         # contrains to respect the phisical limits of the robot
-        v, w = self._saturate_commands(v, w)
+        v, w = self._saturate_commands(v_cmd, w_cmd)
 
         if self._logger is not None:
             self._logger.info(
                 f"[{self._state.name}] Side:{'R' if self._side_sign == 1 else 'L'} | Front:{d_front:.2f} | Right:{d_right:.2f} |  Left: {d_left:.2f} | w:{w:.2f}"
             )
+
+
+        if not self._simulation:
+            w = -w
+
         return v, w
 
     def _clean_lidar_data(self, z_scan: list[float]) -> list[float]:
@@ -107,14 +117,35 @@ class WallFollower:
         Returns:
             A clean list of distances.
         """
-        clean_scan = []
-        for r in z_scan:
-            if math.isnan(r) or math.isinf(r) or r == 0.0:
-                # if we get any value that doesnt make sense we set it to the senor max
-                clean_scan.append(self.SENSOR_RANGE_MAX)
-            else:
-                clean_scan.append(r)
-        return clean_scan
+
+        if self._simulation:
+            clean_scan = []
+            for r in z_scan:
+                if math.isnan(r) or math.isinf(r) or r == 0.0:
+                    # if we get any value that doesnt make sense we set it to the senor max
+                    clean_scan.append(self.SENSOR_RANGE_MAX)
+                else:
+                    clean_scan.append(r)
+            return clean_scan
+        else:
+            return list(z_scan)
+        
+    
+
+    def _get_robust_min(self, values: list[float]) -> float:
+       
+        if self._simulation:
+            valid_values = values
+        else:
+            valid_values = [v for v in values if not math.isnan(v) and not math.isinf(v) and v > 0.0]
+        
+  
+        if not valid_values: 
+            return self.SENSOR_RANGE_MAX
+        
+        k = min(len(valid_values), 5) 
+        sorted_vals = sorted(valid_values)
+        return sum(sorted_vals[:k]) / k
 
     def _get_sensor_readings(self, scan: list[float]) -> tuple[float, float, float]:
         """Extracts specific ranges of distance from the Lidar scan.
@@ -128,11 +159,39 @@ class WallFollower:
                 d_right: Distance to the closest obstacle on the right [m].
         """
 
-        d_right = min(scan[160:200])  # values we use to detect how far the right wall is
-        d_front = min(scan[-5:] + scan[:5])  # values to detect the front
-        d_left = min(scan[40:80])
+    
+        if self._simulation:
+            d_right = min(scan[160:200])
+            d_front = min(scan[-5:] + scan[:5])
+            d_left = min(scan[40:80])
+            return d_front, d_left, d_right
 
-        return d_front, d_left, d_right
+        else:
+            n = len(scan)
+            if n == 0: 
+                return self.SENSOR_RANGE_MAX, self.SENSOR_RANGE_MAX, self.SENSOR_RANGE_MAX 
+
+            
+            #  +/- 20 degrees range for left and right
+            SIDE_APERTURE = 20
+            #  +/- 10 degree range for front
+            FRONT_APERTURE = 5 
+
+            # convert degrees into number of indexes/ lidar rays"
+            rays_per_degree = n / 360.0
+            
+            side_width = int(SIDE_APERTURE * rays_per_degree)
+            front_width = int(FRONT_APERTURE * rays_per_degree)
+
+            fw = max(1, front_width)
+            d_front = self._get_robust_min(scan[-fw:] + scan[:fw])
+
+            idx_left = int(n / 4)
+            d_left = self._get_robust_min(scan[idx_left - side_width : idx_left + side_width])
+
+            idx_right = int(3 * n / 4)
+            d_right = self._get_robust_min(scan[idx_right - side_width : idx_right + side_width])
+            return d_front, d_left, d_right
 
     def _get_wall_distances(self, d_left: float, d_right: float) -> tuple[float, float]:
         """Determines distances to the followed wall and the opposite wall.
@@ -180,31 +239,61 @@ class WallFollower:
             return
 
         # ---  Side Switching ---
-        # if distance to current wall is greater than distance to the other wall -> switch
-        if distance_to_current_wall > distance_to_other_wall:
-            self._side_sign *= -1
-            self._prev_error = 0.0
-            self._state = State.FOLLOW_WALL
-            return
+        # block change if the robot is turning
+        if self._state != State.CORNER:
+            should_switch = False
+            if self._simulation:
+                if distance_to_current_wall > distance_to_other_wall:
+                    should_switch = True
+            else:
+                # only switches wall if the other wall is clearly a better option to follow
+                HYSTERESIS = 0.1 # 
+                
+                if distance_to_other_wall < (distance_to_current_wall - HYSTERESIS):
+                    should_switch = True
+
+            if should_switch:
+                self._side_sign *= -1 
+
+                
+                self._prev_error = 0.0
+                self._state = State.FOLLOW_WALL
+                return
 
         # --- State Transitions ---
         if self._state == State.CORNER:
-            # robot has tu turn 90º before veign allowed to exir this state
-            self._angle_turned += abs(z_w) * self._dt
+            # robot has tu turn 90º before beign allowed to exir this state
+            if self._simulation:
+                self._angle_turned += abs(z_w) * self._dt
+            else:
+                self._angle_turned += 0.5 * self._dt
+            
             if self._angle_turned >= self.TURN_ANGLE_TARGET:
                 self._state = State.FIND_WALL
                 self._prev_error = 0.0
                 self._angle_turned = 0.0
         else:
             if d_front < self.MAX_FRONT_DISTANCE:
+                # last check before turning?
+                # Antes de girar a ciegas, miramos qué lado tiene más hueco REALMENTE
+                if not self._simulation:
+                    if d_left < d_right:
+                        # Si hay menos hueco a la izq, la pared está a la izq -> sigo izq -> giro derecha
+                        self._side_sign = -1 
+                    elif d_left > d_right:
+                        # Si hay menos hueco a la der, la pared está a la der -> sigo der -> giro izquierda
+                        self._side_sign = 1
                 self._state = State.CORNER
                 self._angle_turned = 0.0  # Reset integrator
+                self._prev_error = 0.0
+                return
+
             elif distance_to_current_wall < 1.0:
                 # if the robot is not near a front wall, and it can detect a side wall
                 self._state = State.FOLLOW_WALL
             else:
                 self._state = State.FIND_WALL
-
+        return 
     def _compute_actions_based_on_state(
         self, distance_to_current_wall: float
     ) -> tuple[float, float]:
@@ -237,8 +326,19 @@ class WallFollower:
             error = self.DIST_REF - distance_to_current_wall
 
             derivative = (error - self._prev_error) / self._dt
+            # w = -self._side_sign * (self.K_p * error + self.K_d * derivative)
+            pid_output = -self._side_sign * (self.K_p * error + self.K_d * derivative)
 
-            w = -self._side_sign * (self.K_p * error + self.K_d * derivative)
+
+            PID_LIMIT = 0.5 
+            
+            if pid_output > PID_LIMIT:
+                w = PID_LIMIT
+            elif pid_output < -PID_LIMIT:
+                w = -PID_LIMIT
+            else:
+                w = pid_output
+
             self._prev_error = error
 
         elif self._state == State.FIND_WALL:
@@ -246,6 +346,7 @@ class WallFollower:
             v = 0.08
             w = 0.45 * self._side_sign
             self._prev_error = 0.0
+        
 
         return v, w
 
@@ -267,7 +368,7 @@ class WallFollower:
         w_limit = (self.WHEEL_SPEED_MAX * r - abs(v)) / b
 
         if abs(w) > w_limit:
-            # prioritize angular velocity, reduce linear velocity
+            # prioritize angular velo   city, reduce linear velocity
             v_altered = (self.WHEEL_SPEED_MAX * r) - (abs(w) * b)
 
             if v_altered < 0:

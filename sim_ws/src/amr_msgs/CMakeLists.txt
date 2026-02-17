@@ -14,17 +14,6 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
-set(msg_files
-  "msg/PoseStamped.msg"
-)
-
-rosidl_generate_interfaces(${PROJECT_NAME}
-  ${msg_files}
-  DEPENDENCIES builtin_interfaces geometry_msgs std_msgs
-)
-
-ament_export_dependencies(rosidl_default_runtime)
-
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
@@ -36,5 +25,22 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+
+
+
+set(msg_files
+  "msg/Key.msg"
+)
+set(msg_files
+  "msg/PoseStamped.msg"
+)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  ${msg_files}
+  DEPENDENCIES builtin_interfaces geometry_msgs std_msgs
+)
+ament_export_dependencies(rosidl_default_runtime)
+
 
 ament_package()

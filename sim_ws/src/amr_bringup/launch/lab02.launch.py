@@ -5,54 +5,98 @@ import math
 
 
 def generate_launch_description():
-    simulation = True
-    # start = (1.0, -1.0, 0.5 * math.pi)  # Outer corridor
-    start = (0.6, -0.6, 1.5 * math.pi)  # Inner corridor
-    # start = (0.90, -1.0, 0.5 * math.pi) # close to wall
+    simulation = False # change manually to execute in real world
+    
 
-    wall_follower_node = LifecycleNode(
-        package="amr_control",
-        executable="wall_follower",
-        name="wall_follower",
-        namespace="",
-        output="screen",
-        arguments=[
-            "--ros-args",
-            "--log-level",
-            "INFO",
-        ],  # (WARN before) Allow wal follower to publish info logs
-        parameters=[{"simulation": simulation}],
-    )
+    if simulation:
+        # start = (1.0, -1.0, 0.5 * math.pi)  # Outer corridor
+        start = (0.6, -0.6, 1.5 * math.pi)  # Inner corridor
+        # start = (0.90, -1.0, 0.5 * math.pi) # close to wall
+        wall_follower_node = LifecycleNode(
+            package="amr_control",
+            executable="wall_follower",
+            name="wall_follower",
+            namespace="",
+            output="screen",
+            arguments=[
+                "--ros-args",
+                "--log-level",
+                "INFO",
+            ],  # (WARN before) Allow wal follower to publish info logs
+            parameters=[{"simulation": simulation}],
+        )
 
-    coppeliasim_node = LifecycleNode(
-        package="amr_simulation",
-        executable="coppeliasim",
-        name="coppeliasim",
-        namespace="",
-        output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
-        parameters=[{"start": start}],
-    )
+        coppeliasim_node = LifecycleNode(
+            package="amr_simulation",
+            executable="coppeliasim",
+            name="coppeliasim",
+            namespace="",
+            output="screen",
+            arguments=["--ros-args", "--log-level", "WARN"],
+            parameters=[{"start": start}],
+        )
 
-    lifecycle_manager_node = Node(
-        package="amr_bringup",
-        executable="lifecycle_manager",
-        output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
-        parameters=[
-            {
-                "node_startup_order": (
-                    "wall_follower",
-                    "coppeliasim",  # Must be started last
-                )
-            }
-        ],
-    )
+        lifecycle_manager_node = Node(
+            package="amr_bringup",
+            executable="lifecycle_manager",
+            output="screen",
+            arguments=["--ros-args", "--log-level", "WARN"],
+            parameters=[
+                {
+                    "node_startup_order": (
+                        "wall_follower",
+                        "coppeliasim",  # Must be started last
+                    )
+                }
+            ],
+        )
 
-    return LaunchDescription(
-        [
-            wall_follower_node,
-            coppeliasim_node,
-            lifecycle_manager_node,  # Must be launched last
-        ]
-    )
+        return LaunchDescription(
+            [
+                wall_follower_node,
+                coppeliasim_node,
+                lifecycle_manager_node,  # Must be launched last
+            ]
+        )
+    else:
+        wall_follower_node = LifecycleNode(
+            package="amr_control",
+            executable="wall_follower",
+            name="wall_follower",
+            namespace="",
+            output="screen",
+            arguments=[
+                "--ros-args",
+                "--log-level",
+                "INFO",
+            ],  # (WARN before) Allow wal follower to publish info logs
+            parameters=[{
+                "simulation": simulation,
+                
+            }],
+
+
+
+        )
+
+       
+
+        lifecycle_manager_node = Node(
+            package="amr_bringup",
+            executable="lifecycle_manager",
+            output="screen",
+            arguments=["--ros-args", "--log-level", "WARN"],
+            parameters=[
+                {
+                    "node_startup_order": ["wall_follower"]
+                }
+            ],
+        )
+
+        return LaunchDescription(
+            [
+                wall_follower_node,
+                #coppeliasim_node,
+                lifecycle_manager_node,  # Must be launched last
+            ]
+        )
