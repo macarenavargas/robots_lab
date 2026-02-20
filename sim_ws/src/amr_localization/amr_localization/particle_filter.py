@@ -273,6 +273,19 @@ class ParticleFilter:
 
         # TODO: 3.6. Complete the missing function body with your code.
 
+        # number of rays to measure for each particle
+        num_rays = 8
+        # assuming that the lidar array has 360 values, we extract 8 that are equally spaced out
+        indxs = np.linspace(0, 359, num_rays, dtype=int)
+
+        # extract the lidar rays in segment format
+        selected_rays = self._lidar_rays(pose, indxs)
+
+        for ray in selected_rays:
+            # calcualate the distances of each ray from the robot to any obstacle if there is any
+            _, distances = self._map.check_collision(ray, True)
+            z_hat.append(distances)
+
         return z_hat
 
     @staticmethod
