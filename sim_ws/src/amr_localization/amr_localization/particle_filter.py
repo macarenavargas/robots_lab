@@ -134,7 +134,28 @@ class ParticleFilter:
 
         """
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+
+        # calculate the weights for each particel (their probability)
+        weights = np.array(
+            [self._measurement_probability(measurements, p) for p in self._particles]
+        )
+        N = self._particle_count
+        W = np.sum(weights)
+
+        # create an array with the cumulative sum
+        weight_ruler = np.cumsum(weights)
+        N = self._particle_count
+        step = W / N
+        # take the first sample starting point
+        start = np.random.uniform(0, step)
+
+        # generate the N points we are going to select out of the array
+        selection_points = start + np.arange(N) * step
+
+        # with digitize we asociate the selection points with their corresponding index in the weight ruler array
+        new_idxs = np.digitize(selection_points, weight_ruler)
+        # we filter the array bu the selected idxs and update the particle list.
+        self._particles = self._particles[new_idxs].copy()
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
