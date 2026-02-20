@@ -302,7 +302,13 @@ class ParticleFilter:
 
         """
         # TODO: 3.7. Complete the function body (i.e., replace the code below).
-        return 0.0
+        # error between robots measurment and particle measurment
+        error = x - mu
+        # Si el error es 0, el resultado es el máximo posible
+        # gauss formula
+        num = math.exp(-(error**2) / (2 * sigma**2))
+        den = sigma * math.sqrt(2 * math.pi)
+        return num / den
 
     def _lidar_rays(
         self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
