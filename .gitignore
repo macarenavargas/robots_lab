@@ -1,16 +1,21 @@
-# --- ROS 2 (Archivos temporales y pesados) ---
-# Estos se crean al compilar y no deben subirse
-build/
-install/
-log/
-devel/
+# --- ROS 2 (Multispace) ---
+# Ignora build, install y log en cualquier parte del repositorio
+**/build/
+**/install/
+**/log/
+**/devel/
+
+# --- Imágenes del Filtro de Partículas ---
+# Ignora todas las carpetas de capturas dentro de images, pero mantén el .gitignore si lo hay
+**/amr_localization/images/*/
 
 # --- Python ---
-__pycache__/
+**/__pycache__/
 *.pyc
+*.pyo
+*.pyd
 
 # --- VS Code y Docker ---
-# Ajustes locales que no necesitan tus compañeras
 .vscode/
 .devcontainer/targets/
 
