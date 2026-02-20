@@ -58,6 +58,7 @@ class ParticleFilter:
         self._sigma_z: float = sigma_z
         self._simulation: bool = simulation
         self._iteration: int = 0
+        self._num_rays = 8
 
         self._map = Map(
             map_path,
@@ -273,10 +274,8 @@ class ParticleFilter:
 
         # TODO: 3.6. Complete the missing function body with your code.
 
-        # number of rays to measure for each particle
-        num_rays = 8
         # assuming that the lidar array has 360 values, we extract 8 that are equally spaced out
-        indxs = np.linspace(0, 359, num_rays, dtype=int)
+        indxs = np.linspace(0, 359, self._num_rays, dtype=int)
 
         # extract the lidar rays in segment format
         selected_rays = self._lidar_rays(pose, indxs)
@@ -362,5 +361,21 @@ class ParticleFilter:
         probability = 1.0
 
         # TODO: 3.8. Complete the missing function body with your code.
+
+        # take the particles ray measurements
+        particle_measurements = self._sense(particle)
+        # clean the nans of the particle's measurement
+        particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_min)
+
+        # extract the rays that correspond out of the real measurements
+        indxs = np.linspace(0, 359, self._num_rays, dtype=int)
+        real_measurements = np.array(measurements)[indxs]
+        real_measurements = np.nan_to_num(real_measurements, nan=self._sensor_range_min)
+
+        # claculate the likelihood of the particle with the robot
+        for i in range(self._num_rays):
+            probability *= self._gaussian(
+                particle_measurements[i], self._sigma_z, real_measurements[i]
+            )
 
         return probability
