@@ -88,7 +88,7 @@ class ParticleFilter:
         # TODO: 3.10. Complete the missing function body with your code.
         localized: bool = False
         pose: tuple[float, float, float] = (float("inf"), float("inf"), float("inf"))
-        
+
         return localized, pose
 
     def move(self, v: float, w: float) -> None:
@@ -102,7 +102,7 @@ class ParticleFilter:
         self._iteration += 1
 
         # TODO: 3.5. Complete the function body with your code.
-        
+
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
 
@@ -112,7 +112,7 @@ class ParticleFilter:
         """
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
         pass
-        
+
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
 
@@ -210,40 +210,32 @@ class ParticleFilter:
 
         """
         particles = np.empty((particle_count, 3), dtype=object)
-        valid_orientations = [0, math.pi/2, math.pi, math.pi * 3 / 2 ]
+        valid_orientations = [0, math.pi / 2, math.pi, math.pi * 3 / 2]
         x_min, y_min, x_max, y_max = self._map.bounds()
 
         # TODO: 3.4. Complete the missing function body with your code.
 
-        num_particled_created = 0 
-        
+        num_particled_created = 0
 
-        while num_particled_created< particle_count: 
-
-            if global_localization: 
-                # every point of the map is equally probable. 
+        while num_particled_created < particle_count:
+            if global_localization:
+                # every point of the map is equally probable.
                 x = random.uniform(x_min, x_max)
                 y = random.uniform(y_min, y_max)
-                theta =  random.choice(valid_orientations)
-            
-            else:  # we make a gaussian distribution centered on the estimated position of the robot 
-                # and with the indicated desviation 
-                x =  np.random.normal(initial_pose[0], initial_pose_sigma[0])
-                y =  np.random.normal(initial_pose[1], initial_pose_sigma[1])
+                theta = random.choice(valid_orientations)
+
+            else:  # we make a gaussian distribution centered on the estimated position of the robot
+                # and with the indicated desviation
+                x = np.random.normal(initial_pose[0], initial_pose_sigma[0])
+                y = np.random.normal(initial_pose[1], initial_pose_sigma[1])
                 theta = np.random.normal(initial_pose[2], initial_pose_sigma[2])
-                
 
-
-            if self._map.contains((x,y)): 
+            if self._map.contains((x, y)):
                 particles[num_particled_created, 0] = x
                 particles[num_particled_created, 1] = y
-                particles[num_particled_created, 2] = theta 
-                num_particled_created +=1 
+                particles[num_particled_created, 2] = theta
+                num_particled_created += 1
 
-
-
-            
-    
         return particles
 
     def _sense(self, pose: tuple[float, float, float]) -> list[float]:
@@ -258,7 +250,7 @@ class ParticleFilter:
         z_hat: list[float] = []
 
         # TODO: 3.6. Complete the missing function body with your code.
-        
+
         return z_hat
 
     @staticmethod
@@ -276,7 +268,7 @@ class ParticleFilter:
         """
         # TODO: 3.7. Complete the function body (i.e., replace the code below).
         return 0.0
-        
+
     def _lidar_rays(
         self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
     ) -> list[list[tuple[float, float]]]:
@@ -329,5 +321,5 @@ class ParticleFilter:
         probability = 1.0
 
         # TODO: 3.8. Complete the missing function body with your code.
-        
+
         return probability
