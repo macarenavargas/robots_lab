@@ -296,10 +296,10 @@ class ParticleFilter:
         # TODO: 3.6. Complete the missing function body with your code.
 
         # assuming that the lidar array has 360 values, we extract 8 that are equally spaced out
-        indxs = np.linspace(0, 359, self._num_rays, dtype=int)
+        idxs = np.linspace(0, 239, self._num_rays, dtype=int)
 
         # extract the lidar rays in segment format
-        selected_rays = self._lidar_rays(pose, indxs)
+        selected_rays = self._lidar_rays(pose, idxs)
 
         for ray in selected_rays:
             # calcualate the distances of each ray from the robot to any obstacle if there is any
@@ -389,8 +389,9 @@ class ParticleFilter:
         particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_min)
 
         # extract the rays that correspond out of the real measurements
-        indxs = np.linspace(0, 359, self._num_rays, dtype=int)
-        real_measurements = np.array(measurements)[indxs]
+        num_total_mesurements = len(measurements)
+        idxs = np.linspace(0, num_total_mesurements - 1, self._num_rays, dtype=int)
+        real_measurements = np.array(measurements)[idxs]
         real_measurements = np.nan_to_num(real_measurements, nan=self._sensor_range_min)
 
         # claculate the likelihood of the particle with the robot
