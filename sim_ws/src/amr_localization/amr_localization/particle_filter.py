@@ -90,6 +90,58 @@ class ParticleFilter:
         localized: bool = False
         pose: tuple[float, float, float] = (float("inf"), float("inf"), float("inf"))
 
+        # 1. Extraemos columnas como floats (NumPy)
+        x_parts = self._particles[:, 0].astype(float)
+        y_parts = self._particles[:, 1].astype(float)
+        th_parts = self._particles[:, 2].astype(float)
+
+        # 2. Creamos el espacio ampliado para DBSCAN (x, y, sin, cos)
+        # Esto evita problemas con la discontinuidad de los ángulos 0 y 2pi
+        features = np.column_stack((x_parts, y_parts, np.sin(th_parts), np.cos(th_parts)))
+
+        # 3. Ejecutamos DBSCAN
+        db = DBSCAN(eps=0.3, min_samples=10).fit(features)
+        labels = db.labels_
+
+        unique_labels = set(labels)
+        if -1 in unique_labels:
+            unique_labels.remove(-1)
+
+        n_clusters = len(unique_labels)
+
+        # 4. Lógica de selección según el número de grupos
+        if n_clusters == 1:
+            localized = True
+            mask = labels == 0  # Filtramos solo las partículas del cluster principal
+
+            # Calculamos el centroide del grupo
+            x_hat = float(x_parts[mask].mean())
+            y_hat = float(y_parts[mask].mean())
+            s_hat = float(np.sin(th_parts[mask]).mean())
+            c_hat = float(np.cos(th_parts[mask]).mean())
+
+            # Recuperamos el ángulo final correctamente con atan2
+            th_hat = float(math.atan2(s_hat, c_hat))
+
+            pose = (x_hat, y_hat, th_hat)
+
+            # Reducimos a 50 partículas para el seguimiento (tracking)
+            self._particle_count = 50
+
+        elif n_clusters > 1:
+            # Tu lógica de reducción progresiva
+            n_min_loc = 100
+            if n_clusters >= 6:
+                n_target = self._particle_count
+            elif n_clusters >= 3:
+                n_target = max(n_min_loc, self._particle_count // 2)
+            else:
+                n_target = max(n_min_loc, 150)
+
+            if n_target < self._particle_count:
+                self._particle_count = n_target
+                self._particles = self._particles[: self._particle_count].copy()
+
         return localized, pose
 
     def move(self, v: float, w: float) -> None:
