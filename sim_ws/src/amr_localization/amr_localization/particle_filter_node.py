@@ -146,6 +146,8 @@ class ParticleFilterNode(LifecycleNode):
                     MotionControl, "/motion_control", qos_profile=10
                 )
 
+                self._timer = self.create_timer(5.0, self._timer_callback)
+
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR
@@ -162,6 +164,29 @@ class ParticleFilterNode(LifecycleNode):
         self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
+
+    def _timer_callback(self):
+
+        # a) publish the motionControl message to indicate the robot that it needs to stop
+        motion_msg = MotionControl()
+        motion_msg.allow_motion = False
+        self._publisher_motion_control.publish(motion_msg)
+
+        # b) execute as many motion steps as measurementes acumulated in odometry
+        for z_v, z_w in self._odom_measurements:
+            self._execute_motion_step(z_v, z_w)
+
+        self._odom_measurements.clear()
+        # c) execute one single correction phase
+
+        x_h, y_h, theta_h = self._execute_measurement_step(self._last_z_scan)
+
+        # d) publish the motion control message again to tell the robot to move
+        motion_msg.allow_motion = True
+        self._publisher_motion_control.publish(motion_msg)
+
+        # e) publish the estimated pose
+        self._publish_pose_estimate(x_h, y_h, theta_h)
 
     def _scan_callback(self, scan_msg: LaserScan):
         self._last_z_scan = scan_msg.ranges
