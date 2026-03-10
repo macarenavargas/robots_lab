@@ -6,6 +6,7 @@ import message_filters
 from amr_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
+from amr_msgs.msg import MotionControl
 
 import math
 import os
@@ -72,6 +73,10 @@ class ParticleFilterNode(LifecycleNode):
             # Attribute and object initializations
             self._localized = False
             self._steps = 0
+
+            self._last_z_scan = None
+            self._odom_measurements = []
+
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
             )
@@ -107,18 +112,39 @@ class ParticleFilterNode(LifecycleNode):
                 durability=QoSDurabilityPolicy.VOLATILE,
             )
 
-            self._subscribers: list[message_filters.Subscriber] = []
-            self._subscribers.append(
-                message_filters.Subscriber(self, Odometry, "odometry", qos_profile=scan_qos_profile)
-            )
-            self._subscribers.append(
-                message_filters.Subscriber(self, LaserScan, "scan", qos_profile=scan_qos_profile)
-            )
+            if self._simulation:
+                self._subscribers: list[message_filters.Subscriber] = []
+                self._subscribers.append(
+                    message_filters.Subscriber(
+                        self, Odometry, "odometry", qos_profile=scan_qos_profile
+                    )
+                )
+                self._subscribers.append(
+                    message_filters.Subscriber(
+                        self, LaserScan, "scan", qos_profile=scan_qos_profile
+                    )
+                )
 
-            ts = message_filters.ApproximateTimeSynchronizer(
-                self._subscribers, queue_size=10, slop=9
-            )
-            ts.registerCallback(self._compute_pose_callback)
+                ts = message_filters.ApproximateTimeSynchronizer(
+                    self._subscribers, queue_size=10, slop=9
+                )
+                ts.registerCallback(self._compute_pose_callback)
+
+            # Publisher for movement control
+            if not self._simulation:
+                self._subscriber_odom = self.create_subscription(
+                    Odometry,
+                    "odometry",
+                    callback=self._odometry_callback,
+                    qos_profile=scan_qos_profile,
+                )
+                self._subscriber_scan = self.create_subscription(
+                    LaserScan, "scan", callback=self._scan_callback, qos_profile=scan_qos_profile
+                )
+
+                self._publisher_motion_control = self.create_publisher(
+                    MotionControl, "/motion_control", qos_profile=10
+                )
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -136,6 +162,17 @@ class ParticleFilterNode(LifecycleNode):
         self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
+
+    def _scan_callback(self, scan_msg: LaserScan):
+        self._last_z_scan = scan_msg.ranges
+
+    def _odometry_callback(self, odom_msg: Odometry):
+        z_v: float = odom_msg.twist.twist.linear.x
+        z_w: float = odom_msg.twist.twist.angular.z
+
+        noise_threshold = 1e-3
+        if abs(z_v) > noise_threshold or abs(z_w) > noise_threshold:
+            self._odom_measurements.append((z_v, z_w))
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
         """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
@@ -219,7 +256,7 @@ class ParticleFilterNode(LifecycleNode):
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = "map"
         msg.localized = self._localized
-        
+
         if self._localized:
             msg.pose.position.x = x_h
             msg.pose.position.y = y_h
@@ -231,7 +268,6 @@ class ParticleFilterNode(LifecycleNode):
             msg.pose.orientation.z = qz
             msg.pose.orientation.w = qw
 
-       
         self._publisher_pose.publish(msg)
 
 
