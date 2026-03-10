@@ -90,7 +90,7 @@ class PRM:
         path: list[tuple[float, float]] = []
 
         return path
-        
+
     @staticmethod
     def smooth_path(
         path: list[tuple[float, float]],
@@ -115,7 +115,7 @@ class PRM:
         """
         # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
         smoothed_path: list[tuple[float, float]] = []
-        
+
         return smoothed_path
 
     def plot(
@@ -238,7 +238,7 @@ class PRM:
 
         """
         # TODO: 4.2. Complete the missing function body with your code.
-        
+
         return graph
 
     def _create_graph(
@@ -284,7 +284,26 @@ class PRM:
         graph: dict[tuple[float, float], list[tuple[float, float]]] = {}
 
         # TODO: 4.1. Complete the missing function body with your code.
-        
+        x_min, y_min, x_max, y_max = self._map.bounds()
+
+        if not use_grid:
+            while len(graph) < node_count:
+                x = random.uniform(x_min, x_max)
+                y = random.uniform(y_min, y_max)
+
+                point = (round(x, 3), round(y, 3))
+
+                if self._map.contains(point):
+                    graph[point] = []
+
+        else:
+            for x in np.arange(x_min, x_max, grid_size):
+                for y in np.arange(y_min, y_max, grid_size):
+                    point = (round(x, 3), round(y, 3))
+
+                    if self._map.contains(point):
+                        graph[point] = []
+
         return graph
 
     def _reconstruct_path(
@@ -307,7 +326,7 @@ class PRM:
         path: list[tuple[float, float]] = []
 
         # TODO: 4.4. Complete the missing function body with your code.
-        
+
         return path
 
 
