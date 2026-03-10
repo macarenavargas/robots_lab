@@ -90,57 +90,67 @@ class ParticleFilter:
         localized: bool = False
         pose: tuple[float, float, float] = (float("inf"), float("inf"), float("inf"))
 
-        # 1. Extraemos columnas como floats (NumPy)
-        x_parts = self._particles[:, 0].astype(float)
-        y_parts = self._particles[:, 1].astype(float)
-        th_parts = self._particles[:, 2].astype(float)
+        # extract the data
+        x_p = self._particles[:, 0].astype(float)
+        y_p = self._particles[:, 1].astype(float)
+        th_p = self._particles[:, 2].astype(float)
+        features = np.column_stack((x_p, y_p, np.sin(th_p), np.cos(th_p)))
 
-        # 2. Creamos el espacio ampliado para DBSCAN (x, y, sin, cos)
-        # Esto evita problemas con la discontinuidad de los ángulos 0 y 2pi
-        features = np.column_stack((x_parts, y_parts, np.sin(th_parts), np.cos(th_parts)))
-
-        # 3. Ejecutamos DBSCAN
-        db = DBSCAN(eps=0.3, min_samples=10).fit(features)
+        # create the Clustering object
+        # eps: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
+        db = DBSCAN(eps=0.2, min_samples=15).fit(features)
+        # labels_: Cluster labels for each point in the dataset given to fit().
+        # Noisy samples are given the label -1. Non-negative integers indicate cluster membership.
         labels = db.labels_
 
+        # extract the unique labels of each cluster
         unique_labels = set(labels)
+
+        # remove the noise label
         if -1 in unique_labels:
             unique_labels.remove(-1)
 
         n_clusters = len(unique_labels)
 
-        # 4. Lógica de selección según el número de grupos
+        # if we only have one cluster left -> localized
         if n_clusters == 1:
-            localized = True
-            mask = labels == 0  # Filtramos solo las partículas del cluster principal
+            # since we create a new dbscan object each iteration, when we only have one cluster left,
+            # we know that its label assigned will be 0
+            mask = labels == 0
+            # count how many particles belong to the one cluster
+            percentage_in_cluster = np.sum(mask) / self._particle_count
 
-            # Calculamos el centroide del grupo
-            x_hat = float(x_parts[mask].mean())
-            y_hat = float(y_parts[mask].mean())
-            s_hat = float(np.sin(th_parts[mask]).mean())
-            c_hat = float(np.cos(th_parts[mask]).mean())
+            # security filter to make sure that most of the particles are actually in the cluster
+            if percentage_in_cluster > 0.7 and np.sum(mask) > 30:
+                # the robot has been localized
+                localized = True
 
-            # Recuperamos el ángulo final correctamente con atan2
-            th_hat = float(math.atan2(s_hat, c_hat))
+                # calculate centroid with atan2
+                x_hat = float(x_p[mask].mean())
+                y_hat = float(y_p[mask].mean())
+                th_hat = float(math.atan2(np.sin(th_p[mask]).mean(), np.cos(th_p[mask]).mean()))
 
-            pose = (x_hat, y_hat, th_hat)
+                pose = (x_hat, y_hat, th_hat)
 
-            # Reducimos a 50 partículas para el seguimiento (tracking)
-            self._particle_count = 50
+                # 50?
+                self._particle_count = 50
+            else:
+                # means that some particles have been grouped by chance, but in reality most of the particles are diseprsed
+                localized = False
 
         elif n_clusters > 1:
-            # Tu lógica de reducción progresiva
-            n_min_loc = 100
-            if n_clusters >= 6:
-                n_target = self._particle_count
-            elif n_clusters >= 3:
-                n_target = max(n_min_loc, self._particle_count // 2)
-            else:
-                n_target = max(n_min_loc, 150)
+            # if we have multiple clusters
+            localized = False
+            # asign 100 particles for each cluster that exists
+            particles_needed = n_clusters * 100
 
-            if n_target < self._particle_count:
-                self._particle_count = n_target
-                self._particles = self._particles[: self._particle_count].copy()
+            # we put an upper bound limit so that we dont create more particles than self._initial_particle_count
+            # we put an lower bound so that we habe at leas 200 particles during the whole process
+            self._particle_count = min(self._initial_particle_count, max(200, particles_needed))
+        else:
+            # n_clusters == 0: the robot is lost
+            localized = False
+            self._particle_count = self._initial_particle_count
 
         return localized, pose
 
@@ -167,7 +177,7 @@ class ParticleFilter:
             # calulate y position
             y_new = y_prev + v_gauss * np.sin(theta_prev) * self._dt
             # calulate theta and normalize so that the value is between [0,2pi]
-            theta_new = (theta_prev + w_gauss * self._dt) % (2 * math.pi)
+            theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
             # calculate if its outside the allowed boundaries
             intersection, _ = self._map.check_collision([(x_prev, y_prev), (x_new, y_new)], False)
 
