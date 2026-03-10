@@ -4,6 +4,7 @@ import os
 import pytz
 import random
 import time
+import math
 
 # This try-except enables local debugging of the PRM class
 try:
@@ -238,6 +239,25 @@ class PRM:
 
         """
         # TODO: 4.2. Complete the missing function body with your code.
+
+        nodes = list(graph.keys())
+        num_nodes = len(nodes)
+
+        for i in range(num_nodes):
+            for j in range(i + 1, num_nodes):
+                node_1 = nodes[i]
+                node_2 = nodes[j]
+
+                dist = math.dist(node_1, node_2)
+
+                # 4. Condición de distancia umbral [cite: 50]
+                if dist <= connection_distance:
+                    # 5. Comprobar si la línea recta atraviesa obstáculos [cite: 52]
+                    # Usamos 'crosses' porque es más rápido que 'check_collision' [cite: 53]
+                    if not self.map.crosses(node_1, node_2):
+                        # 6. Como la conexión es bidireccional, añadimos ambos
+                        graph[node_1].append(node_2)
+                        graph[node_2].append(node_1)
 
         return graph
 
