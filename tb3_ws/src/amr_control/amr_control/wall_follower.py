@@ -275,13 +275,15 @@ class WallFollower:
         else:
             if d_front < self.MAX_FRONT_DISTANCE:
                 # last check before turning?
-                # Antes de girar a ciegas, miramos qué lado tiene más hueco REALMENTE
+                # Before turning blindly, loook which side has more space IN REALIYY
+               
                 if not self._simulation:
                     if d_left < d_right:
+                        # less space left , then wall at left -> follow left -> continue right 
                         # Si hay menos hueco a la izq, la pared está a la izq -> sigo izq -> giro derecha
                         self._side_sign = -1 
                     elif d_left > d_right:
-                        # Si hay menos hueco a la der, la pared está a la der -> sigo der -> giro izquierda
+                        # the same but with the right wall 
                         self._side_sign = 1
                 self._state = State.CORNER
                 self._angle_turned = 0.0  # Reset integrator

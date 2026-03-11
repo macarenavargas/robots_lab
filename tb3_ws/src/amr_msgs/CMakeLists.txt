@@ -31,11 +31,9 @@ endif()
 
 set(msg_files
   "msg/Key.msg"
-)
-set(msg_files
   "msg/PoseStamped.msg"
+  "msg/MotionControl.msg"
 )
-
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${msg_files}
   DEPENDENCIES builtin_interfaces geometry_msgs std_msgs
