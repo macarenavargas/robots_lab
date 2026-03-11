@@ -17,10 +17,10 @@ class ParticleFilter:
         self,
         dt: float,
         map_path: str,
-        particle_count: int,
-        sigma_v: float = 0.05,
-        sigma_w: float = 0.1,
-        sigma_z: float = 0.2,
+        particle_count: int, 
+        sigma_v: float = 0.05, # initial value : 0.05
+        sigma_w: float = 0.1, # initial value : 0.1
+        sigma_z: float = 0.2, # initial value : 0.2
         sensor_range_max: float = 8.0,
         sensor_range_min: float = 0.16,
         global_localization: bool = True,
@@ -146,7 +146,12 @@ class ParticleFilter:
 
             # we put an upper bound limit so that we dont create more particles than self._initial_particle_count
             # we put an lower bound so that we habe at leas 200 particles during the whole process
-            self._particle_count = min(self._initial_particle_count, max(200, particles_needed))
+            #self._particle_count = min(self._initial_particle_count, max(200, particles_needed))
+
+            # tests to see optimal methods  : 
+            #self._particle_count = self._initial_particle_count
+            self._particle_count = max(200, self._particle_count //2 )
+
         else:
             # n_clusters == 0: the robot is lost
             localized = False
