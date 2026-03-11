@@ -8,6 +8,7 @@
 # --- Imágenes del Filtro de Partículas ---
 # Ignora todas las carpetas de capturas dentro de images, pero mantén el .gitignore si lo hay
 **/amr_localization/images/*/
+**/amr_planning/images/*/
 
 # --- Python ---
 **/__pycache__/
