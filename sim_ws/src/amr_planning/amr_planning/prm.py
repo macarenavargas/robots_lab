@@ -68,6 +68,19 @@ class PRM:
             "%Y-%m-%d_%H-%M-%S"
         )
 
+    def _find_closest(self, point) -> tuple[float, float]:
+
+        smallest_distance = np.inf
+        closest_node = None
+
+        for value in self._graph.keys:
+            dist = math.dist(value, point)
+            if dist < smallest_distance:
+                smallest_distance = dist
+                closest_node = value
+
+        return closest_node
+
     def find_path(
         self, start: tuple[float, float], goal: tuple[float, float]
     ) -> list[tuple[float, float]]:
@@ -86,9 +99,41 @@ class PRM:
             raise ValueError("Goal location is outside the environment.")
 
         ancestors: dict[tuple[float, float], tuple[float, float]] = {}  # {(x, y: (x_prev, y_prev)}
+        open_list: dict[tuple[float, float], tuple[float, float]] = {}
+        closed_list = set()
+
+        open_list_empty = False
+        goal_reached = False
 
         # TODO: 4.3. Complete the function body (i.e., replace the code below).
         path: list[tuple[float, float]] = []
+
+        closest_node_start = self._find_closest(start)
+        closest_node_goal = self._find_closest(goal)
+
+        g = 0
+        h = math.dist(closest_node_start, closest_node_goal)
+        f = h + g
+        open_list[closest_node_start] = (f, g)
+
+        while not open_list_empty or not goal_reached:
+            node = min(open_list, key=lambda k: open_list.get(k)[0])
+
+            f_node, g_node = open_list[node]
+            del open_list[node]
+
+            list_closest_neighbours = self._graph[node]
+
+            for neighbour in list_closest_neighbours:
+                g_now = g_node + 1
+                h_now = math.dist(neighbour, closest_node_goal)
+                f_now = g_now + h_now
+                if neighbour not in closed_list and neighbour not in open_list:
+                    open_list[neighbour] = (f_now, g_now)
+                elif neighbour in open_list:
+                    if open_list[neighbour][1] > g_now:
+                        open_list[neighbour] = (f_now, g_now)
+            closed_list.add(node)
 
         return path
 
