@@ -91,7 +91,7 @@ class ParticleFilterNode(LifecycleNode):
                 initial_pose=initial_pose,
                 initial_pose_sigma=initial_pose_sigma,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
 
             if self._enable_plot:
@@ -134,19 +134,19 @@ class ParticleFilterNode(LifecycleNode):
             if not self._simulation:
                 self._subscriber_odom = self.create_subscription(
                     Odometry,
-                    "odometry",
+                    "/odometry",
                     callback=self._odometry_callback,
                     qos_profile=scan_qos_profile,
                 )
                 self._subscriber_scan = self.create_subscription(
-                    LaserScan, "scan", callback=self._scan_callback, qos_profile=scan_qos_profile
+                    LaserScan, "/scan", callback=self._scan_callback, qos_profile=scan_qos_profile
                 )
 
                 self._publisher_motion_control = self.create_publisher(
                     MotionControl, "/motion_control", qos_profile=10
                 )
 
-                self._timer = self.create_timer(5.0, self._timer_callback)
+                self._timer = self.create_timer(1, self._timer_callback)
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -166,6 +166,12 @@ class ParticleFilterNode(LifecycleNode):
         return super().on_activate(state)
 
     def _timer_callback(self):
+        self._timer.cancel()
+        if self._last_z_scan is None:
+            self._timer = self.create_timer(1, self._timer_callback)
+            return
+
+   
 
         # a) publish the motionControl message to indicate the robot that it needs to stop
         motion_msg = MotionControl()
@@ -182,11 +188,15 @@ class ParticleFilterNode(LifecycleNode):
         x_h, y_h, theta_h = self._execute_measurement_step(self._last_z_scan)
 
         # d) publish the motion control message again to tell the robot to move
-        motion_msg.allow_motion = True
-        self._publisher_motion_control.publish(motion_msg)
+        motion_msg2 = MotionControl()
+        motion_msg2.allow_motion = True
+        self._publisher_motion_control.publish(motion_msg2)
 
         # e) publish the estimated pose
         self._publish_pose_estimate(x_h, y_h, theta_h)
+
+        
+        self._timer = self.create_timer(1, self._timer_callback)
 
     def _scan_callback(self, scan_msg: LaserScan):
         self._last_z_scan = scan_msg.ranges
