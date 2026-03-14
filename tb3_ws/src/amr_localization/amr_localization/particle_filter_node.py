@@ -77,6 +77,8 @@ class ParticleFilterNode(LifecycleNode):
             self._last_z_scan = None
             self._odom_measurements = []
 
+            self._timer_period = 5
+
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
             )
@@ -146,7 +148,7 @@ class ParticleFilterNode(LifecycleNode):
                     MotionControl, "/motion_control", qos_profile=10
                 )
 
-                self._timer = self.create_timer(1, self._timer_callback)
+                self._timer = self.create_timer(self._timer_period, self._timer_callback)
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -166,37 +168,37 @@ class ParticleFilterNode(LifecycleNode):
         return super().on_activate(state)
 
     def _timer_callback(self):
-        self._timer.cancel()
+    
         if self._last_z_scan is None:
-            self._timer = self.create_timer(1, self._timer_callback)
             return
-
-   
-
-        # a) publish the motionControl message to indicate the robot that it needs to stop
+        # a) STOP THE ROBOT: publish the motionControl message to indicate the robot that it needs to stop
         motion_msg = MotionControl()
         motion_msg.allow_motion = False
         self._publisher_motion_control.publish(motion_msg)
 
-        # b) execute as many motion steps as measurementes acumulated in odometry
-        for z_v, z_w in self._odom_measurements:
-            self._execute_motion_step(z_v, z_w)
+        # b) MOVEMENT: execute as many motion steps as measurementes acumulated in odometry
+        num_measurements = len(self._odom_measurements)
+        if num_measurements > 0:
+            real_dt = self._timer_period / num_measurements # Asumiendo que el timer original es de 5s
+            self._particle_filter._dt = real_dt
+            for z_v, z_w in self._odom_measurements:
+                self._execute_motion_step(z_v, z_w)
 
         self._odom_measurements.clear()
-        # c) execute one single correction phase
-
+        
+        # c) MEASUREMENT: execute one single correction phase
         x_h, y_h, theta_h = self._execute_measurement_step(self._last_z_scan)
 
-        # d) publish the motion control message again to tell the robot to move
+        # d) START THE ROBOT: publish the motion control message again to tell the robot to move
         motion_msg2 = MotionControl()
         motion_msg2.allow_motion = True
         self._publisher_motion_control.publish(motion_msg2)
 
-        # e) publish the estimated pose
+        # e) PUBLISH POSE: publish the estimated pose
         self._publish_pose_estimate(x_h, y_h, theta_h)
 
-        
-        self._timer = self.create_timer(1, self._timer_callback)
+        # RESTART THE TIMER: so that the robot moves the whole timer period
+        self._timer.reset()
 
     def _scan_callback(self, scan_msg: LaserScan):
         self._last_z_scan = scan_msg.ranges

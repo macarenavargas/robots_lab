@@ -59,7 +59,7 @@ class ParticleFilter:
         self._simulation: bool = simulation
         self._iteration: int = 0
         self._num_rays = 8
-        self._ray_idxs = None
+        
 
         self._map = Map(
             map_path,
@@ -142,7 +142,7 @@ class ParticleFilter:
                 localized = False
 
         #elif n_clusters > 1:
-        elif n_clusters > 1 and n_clusters < 4:
+        elif n_clusters > 1:
             # if we have multiple clusters
             localized = False
             # asign 100 particles for each cluster that exists
@@ -210,6 +210,18 @@ class ParticleFilter:
 
         """
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
+
+
+        num_total_measurements = len(measurements)
+        # extract the idx of the selected rays we will analyze
+        idxs_real = np.linspace(0, num_total_measurements - 1, self._num_rays, dtype=int)
+        measurements = np.array(measurements)[idxs_real]
+
+        # Limpiamos infs y NaNs del mundo real
+        measurements[np.isinf(measurements)] = np.nan
+        measurements[measurements < self._sensor_range_min] = np.nan
+        measurements = np.nan_to_num(measurements, nan=self._sensor_range_max) # a max?
+
 
         # calculate the weights for each particel (their probability)
         weights = np.array(
@@ -373,26 +385,18 @@ class ParticleFilter:
         # TODO: 3.6. Complete the missing function body with your code.
 
         # assuming that the lidar array has 360 values, we extract 8 that are equally spaced out
-        if self._simulation:
-            idxs = np.linspace(0, 239, self._num_rays, dtype=int)
-        else:
-            if self._ray_idxs is None:
-                return [float("nan")] * self._num_rays
-            idxs = self._ray_idxs
+        idxs = np.linspace(0, 239, self._num_rays, dtype=int)
 
         # extract the lidar rays in segment format
         selected_rays = self._lidar_rays(pose, idxs)
         
-
         for ray in selected_rays:
-            # calcualate the distances of each ray from the robot to any obstacle if there is any
-            _, distances = self._map.check_collision(ray, True)
-            z_hat.append(distances)
-
-        # if self._logger:
-        #     self._logger.info(f"Predicted lidar: {z_hat}")
-
-
+            # calcualate the distance of each ray from the robot to any obstacle if there is any
+            _, distance = self._map.check_collision(ray, True)
+            if distance is None:
+                z_hat.append(float("nan"))
+            else:
+                z_hat.append(distance)
         return z_hat
 
     @staticmethod
@@ -475,23 +479,10 @@ class ParticleFilter:
         # clean the nans of the particle's measurement
         particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_min)
 
-        # extract the rays that correspond out of the real measurements
-        num_total_mesurements = len(measurements)
-        if self._simulation:
-            idxs = np.linspace(0, num_total_mesurements - 1, self._num_rays, dtype=int) 
-            real_measurements = np.array(measurements)[idxs]
-        else:
-            self._ray_idxs = np.linspace(0, num_total_mesurements - 1, self._num_rays, dtype=int)
-            real_measurements = np.array(measurements)[self._ray_idxs]
-        
-        # if self._logger:
-        #     self._logger.info(f"Real lidar: {real_measurements}")
-        real_measurements = np.nan_to_num(real_measurements, nan=self._sensor_range_min)
-
         # claculate the likelihood of the particle with the robot
         for i in range(self._num_rays):
             probability *= self._gaussian(
-                particle_measurements[i], self._sigma_z, real_measurements[i]
+                particle_measurements[i], self._sigma_z, measurements[i]
             )
 
         return probability
