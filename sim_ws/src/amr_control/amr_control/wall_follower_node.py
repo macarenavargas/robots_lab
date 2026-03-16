@@ -148,6 +148,9 @@ class WallFollowerNode(LifecycleNode):
     def _compute_commands_timer(
         self,
     ):
+        if not self._allow_motion:
+            self._publish_velocity_commands(0.0, 0.0)
+            return
 
         if self._last_z_v is None or self._last_z_w is None or self._last_z_scan is None:
             return

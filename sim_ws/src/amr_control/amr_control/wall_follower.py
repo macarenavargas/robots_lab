@@ -53,8 +53,8 @@ class WallFollower:
             self.K_d = 0.9
         else:
             # too high!! try Kp 3 to 5
-            self.K_p = 6 # 2
-            self.K_d = 5 # 1
+            self.K_p = 2 #6 # 2
+            self.K_d = 1#5# 1
 
         self._prev_error = 0.0
 
