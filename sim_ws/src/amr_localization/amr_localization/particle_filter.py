@@ -17,10 +17,10 @@ class ParticleFilter:
         self,
         dt: float,
         map_path: str,
-        particle_count: int, 
-        sigma_v: float = 0.05, # initial value : 0.05
-        sigma_w: float = 0.1, # initial value : 0.1
-        sigma_z: float = 0.2, # initial value : 0.2
+        particle_count: int,
+        sigma_v: float = 0.05,  # initial value : 0.05
+        sigma_w: float = 0.1,  # initial value : 0.1
+        sigma_z: float = 0.2,  # initial value : 0.2
         sensor_range_max: float = 8.0,
         sensor_range_min: float = 0.16,
         global_localization: bool = True,
@@ -59,7 +59,6 @@ class ParticleFilter:
         self._simulation: bool = simulation
         self._iteration: int = 0
         self._num_rays = 8
-        
 
         self._map = Map(
             map_path,
@@ -141,19 +140,19 @@ class ParticleFilter:
                 # means that some particles have been grouped by chance, but in reality most of the particles are diseprsed
                 localized = False
 
-        #elif n_clusters > 1:
+        # elif n_clusters > 1:
         elif n_clusters > 1:
             # if we have multiple clusters
             localized = False
             # asign 100 particles for each cluster that exists
-            particles_needed = n_clusters * 200 #100
+            particles_needed = n_clusters * 200  # 100
 
             # we put an upper bound limit so that we dont create more particles than self._initial_particle_count
             # we put an lower bound so that we habe at leas 200 particles during the whole process
             self._particle_count = min(self._initial_particle_count, max(200, particles_needed))
 
-            # tests to see optimal methods  : 
-            #self._particle_count = self._initial_particle_count
+            # tests to see optimal methods  :
+            # self._particle_count = self._initial_particle_count
             # self._particle_count = max(200, self._particle_count //2 )
             self._logger.info(f"Particles que hay ahora: {particles_needed}")
 
@@ -161,8 +160,6 @@ class ParticleFilter:
             # n_clusters == 0: the robot is lost
             localized = False
             self._particle_count = self._initial_particle_count
-
-        
 
         return localized, pose
 
@@ -175,7 +172,7 @@ class ParticleFilter:
 
         """
         self._iteration += 1
-       
+
         # TODO: 3.5. Complete the function body with your code.
 
         # we update the pose and orentation of each particle
@@ -191,8 +188,7 @@ class ParticleFilter:
             # calulate theta and normalize so that the value is between [0,2pi]
             theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
 
-           
-                        # calculate if its outside the allowed boundaries
+            # calculate if its outside the allowed boundaries
             intersection, _ = self._map.check_collision([(x_prev, y_prev), (x_new, y_new)], False)
 
             # if it update x and y to the first intersection point
@@ -211,17 +207,18 @@ class ParticleFilter:
         """
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
 
-
         num_total_measurements = len(measurements)
         # extract the idx of the selected rays we will analyze
         idxs_real = np.linspace(0, num_total_measurements - 1, self._num_rays, dtype=int)
         measurements = np.array(measurements)[idxs_real]
 
-        # Limpiamos infs y NaNs del mundo real
         measurements[np.isinf(measurements)] = np.nan
-        measurements[measurements < self._sensor_range_min] = np.nan
-        measurements = np.nan_to_num(measurements, nan=self._sensor_range_max) # a max?
 
+        if self._simulation:
+            measurements = np.nan_to_num(measurements, nan=self._sensor_range_min)
+        else:
+            measurements[measurements < self._sensor_range_min] = np.nan
+            measurements = np.nan_to_num(measurements, nan=self._sensor_range_max)
 
         # calculate the weights for each particel (their probability)
         weights = np.array(
@@ -242,6 +239,7 @@ class ParticleFilter:
 
         # with digitize we asociate the selection points with their corresponding index in the weight ruler array
         new_idxs = np.digitize(selection_points, weight_ruler)
+
         # we filter the array bu the selected idxs and update the particle list.
         self._particles = self._particles[new_idxs].copy()
 
@@ -379,7 +377,7 @@ class ParticleFilter:
         Returns: List of predicted measurements; nan if a sensor is out of range.
 
         """
-     
+
         z_hat: list[float] = []
 
         # TODO: 3.6. Complete the missing function body with your code.
@@ -389,7 +387,7 @@ class ParticleFilter:
 
         # extract the lidar rays in segment format
         selected_rays = self._lidar_rays(pose, idxs)
-        
+
         for ray in selected_rays:
             # calcualate the distance of each ray from the robot to any obstacle if there is any
             _, distance = self._map.check_collision(ray, True)
@@ -476,13 +474,11 @@ class ParticleFilter:
 
         # take the particles ray measurements
         particle_measurements = self._sense(particle)
-        # clean the nans of the particle's measurement
-        particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_min)
+        # clean the nans of the particle's measurement, explain max
+        particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_max)
 
         # claculate the likelihood of the particle with the robot
         for i in range(self._num_rays):
-            probability *= self._gaussian(
-                particle_measurements[i], self._sigma_z, measurements[i]
-            )
+            probability *= self._gaussian(particle_measurements[i], self._sigma_z, measurements[i])
 
         return probability
