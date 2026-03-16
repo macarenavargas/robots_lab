@@ -440,6 +440,16 @@ class PRM:
 
         # TODO: 4.4. Complete the missing function body with your code.
 
+        node = goal 
+        # starting from the end, we reconstruct the path 
+        while node!= start :
+            
+            path.append(node)
+            node =  ancestors[node]
+
+        path.append(start)
+        path.reverse()
+
         return path
 
 
