@@ -438,7 +438,7 @@ class PRM:
         """
         graph = self._generate_nodes(use_grid, node_count, grid_size)
         graph = self._connect_nodes(graph, connection_distance)
-
+        #print(len(graph))
         return graph
 
     def _generate_nodes(
@@ -523,7 +523,9 @@ if __name__ == "__main__":
 
     # Create the roadmap
     start_time = time.perf_counter()
-    prm = PRM(map_path, use_grid=True, node_count=250, grid_size=0.1, connection_distance=0.15)
+    # node_count = 250 when use_grid = True 
+    #prm = PRM(map_path, use_grid=True, node_count=250, grid_size   =0.1, connection_distance=0.15)
+    prm = PRM(map_path, use_grid=False, node_count=300, grid_size   =0.1, connection_distance=0.25)
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
