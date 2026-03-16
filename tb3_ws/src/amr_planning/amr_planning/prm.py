@@ -69,11 +69,20 @@ class PRM:
         )
 
     def _find_closest(self, point) -> tuple[float, float]:
+        """
+            (auxiliar function for the "find_path" method)
+            Finds the closest point on the graph 
 
+            Args : 
+                point : The start or end (x,y)
+
+            Returns: 
+                The closest node that belongs to the graph 
+        """
         smallest_distance = np.inf
         closest_node = None
 
-        for value in self._graph.keys:
+        for value in self._graph.keys():
             dist = math.dist(value, point)
             if dist < smallest_distance:
                 smallest_distance = dist
@@ -98,42 +107,82 @@ class PRM:
         if not self._map.contains(goal):
             raise ValueError("Goal location is outside the environment.")
 
-        ancestors: dict[tuple[float, float], tuple[float, float]] = {}  # {(x, y: (x_prev, y_prev)}
-        open_list: dict[tuple[float, float], tuple[float, float]] = {}
-        closed_list = set()
 
-        open_list_empty = False
-        goal_reached = False
+        ancestors: dict[tuple[float, float], tuple[float, float]] = {}  # {(x, y: (x_prev, y_prev)}
 
         # TODO: 4.3. Complete the function body (i.e., replace the code below).
         path: list[tuple[float, float]] = []
 
+        # 1. Get the start and end nodes 
         closest_node_start = self._find_closest(start)
         closest_node_goal = self._find_closest(goal)
 
+
+        # 2. Initilize the open and close list. 
+        open_list: dict[tuple[float, float], tuple[float, float]] = {}
+        closed_list = set()
+
+
+        # 3. Principal loop 
+        # initial node is the start node. add it to the list to initialize the loop 
         g = 0
         h = math.dist(closest_node_start, closest_node_goal)
         f = h + g
         open_list[closest_node_start] = (f, g)
 
-        while not open_list_empty or not goal_reached:
+        goal_reached = False
+
+        while open_list: 
+
+            # extract the node that has the minimum value from the open list 
             node = min(open_list, key=lambda k: open_list.get(k)[0])
 
-            f_node, g_node = open_list[node]
+            #extract their values and delete it from the open list 
+            _ , g_node = open_list[node]
             del open_list[node]
 
+            if node == closest_node_goal:
+                goal_reached = True
+                break
+
+            # extraet their neighbours 
             list_closest_neighbours = self._graph[node]
 
             for neighbour in list_closest_neighbours:
-                g_now = g_node + 1
+                # calculate their values 
+                #g_now = g_node + 1
+                g_now = g_node + math.dist(node, neighbour)
                 h_now = math.dist(neighbour, closest_node_goal)
                 f_now = g_now + h_now
+
+                # if its not in either lists, add it to the open list 
                 if neighbour not in closed_list and neighbour not in open_list:
                     open_list[neighbour] = (f_now, g_now)
+                    ancestors[neighbour] = node
+                
+                # if it was already in the open list, only add it if it has less g
                 elif neighbour in open_list:
                     if open_list[neighbour][1] > g_now:
                         open_list[neighbour] = (f_now, g_now)
+                        ancestors[neighbour] = node
+
+            
+
+            # add the original node to the close list 
             closed_list.add(node)
+
+        # if we have not got to the goal node, cannot compute the path 
+        if not goal_reached:
+            raise RuntimeError("No path found")
+
+        # add the real starting and ending points 
+        if start != closest_node_start:
+            ancestors[closest_node_start] = start
+        if goal != closest_node_goal:
+            ancestors[goal] = closest_node_goal
+        
+        # reconstruct the path : 
+        path = self._reconstruct_path(closest_node_start, closest_node_goal, ancestors)
 
         return path
 
@@ -160,7 +209,67 @@ class PRM:
 
         """
         # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
-        smoothed_path: list[tuple[float, float]] = []
+     
+        extended_path: list[tuple[float, float]] = []
+
+        # -----add the new intermediate nodes -----
+        for i in range(len(path) - 1): 
+
+            node1 = path[i]
+            x1, y1 = node1
+            node2 = path[i+1]
+            x2, y2 = node2
+            extended_path.append(node1)
+
+            for j in range(additional_smoothing_points): 
+                # we make the linear interpolation 
+                step = (j + 1)/ additional_smoothing_points
+
+                x = x1 + step * (x2 - x1)
+                y = y1 + step * (y2 - y1)
+                extended_path.append((x,y))
+        
+        
+        original_path = extended_path.copy()
+        smoothed_path :list[tuple[float, float]] = []
+        smoothed_path = extended_path.copy()
+
+        # -----gradient descent-----
+
+        total_change = np.inf 
+
+        while total_change > tolerance: 
+            
+            total_change = 0 
+            for i in range(1, len(smoothed_path) -1 ): # not iterate in the start and end 
+                
+                # we get the node of the smoothed path and the original node 
+                x, y = smoothed_path[i]
+                x_old, y_old = x, y
+                x_original, y_original = original_path[i]
+                
+                # CRITERIA 1 : it has to be near the original value 
+                #criteria1 = node - original_node 
+
+                x+= data_weight * (x_original - x)
+                y+= data_weight * (y_original - y)
+
+                
+                # CRITERIA 2 : it has to be near the average of its neighbours 
+                # criteria 2 = prev_node + next_node - 2 * node 
+                
+                x_prev, y_prev = smoothed_path[i-1]
+                x_next, y_next = smoothed_path[i+1]
+
+                x+= smooth_weight * (x_prev + x_next - 2 * x)
+                y+= smooth_weight * (y_prev + y_next - 2 * y)
+
+                # update the modified x and y of this node 
+                smoothed_path[i] = (x, y)
+
+                total_change += abs (x - x_old) + abs (y - y_old)
+
+
 
         return smoothed_path
 
@@ -294,13 +403,14 @@ class PRM:
                 node_2 = nodes[j]
 
                 dist = math.dist(node_1, node_2)
-
-                # 4. Condición de distancia umbral [cite: 50]
                 if dist <= connection_distance:
-                    # 5. Comprobar si la línea recta atraviesa obstáculos [cite: 52]
-                    # Usamos 'crosses' porque es más rápido que 'check_collision' [cite: 53]
-                    if not self.map.crosses(node_1, node_2):
-                        # 6. Como la conexión es bidireccional, añadimos ambos
+                    
+                    # Check if the line does not step into an obstacle
+                    # Create "crosses" (faster then check_collision)
+                  
+                    if not self._map.crosses([node_1, node_2]):
+                
+                        # Add both as the conexion is for both sides 
                         graph[node_1].append(node_2)
                         graph[node_2].append(node_1)
 
@@ -391,6 +501,16 @@ class PRM:
         path: list[tuple[float, float]] = []
 
         # TODO: 4.4. Complete the missing function body with your code.
+
+        node = goal 
+        # starting from the end, we reconstruct the path 
+        while node!= start :
+            
+            path.append(node)
+            node =  ancestors[node]
+
+        path.append(start)
+        path.reverse()
 
         return path
 
