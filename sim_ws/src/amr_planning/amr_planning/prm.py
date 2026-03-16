@@ -82,7 +82,7 @@ class PRM:
         smallest_distance = np.inf
         closest_node = None
 
-        for value in self._graph.keys:
+        for value in self._graph.keys():
             dist = math.dist(value, point)
             if dist < smallest_distance:
                 smallest_distance = dist
@@ -150,7 +150,8 @@ class PRM:
 
             for neighbour in list_closest_neighbours:
                 # calculate their values 
-                g_now = g_node + 1
+                #g_now = g_node + 1
+                g_now = g_node + math.dist(node, neighbour)
                 h_now = math.dist(neighbour, closest_node_goal)
                 f_now = g_now + h_now
 
@@ -208,7 +209,67 @@ class PRM:
 
         """
         # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
-        smoothed_path: list[tuple[float, float]] = []
+     
+        extended_path: list[tuple[float, float]] = []
+
+        # -----add the new intermediate nodes -----
+        for i in range(len(path) - 1): 
+
+            node1 = path[i]
+            x1, y1 = node1
+            node2 = path[i+1]
+            x2, y2 = node2
+            extended_path.append(node1)
+
+            for j in range(additional_smoothing_points): 
+                # we make the linear interpolation 
+                step = (j + 1)/ additional_smoothing_points
+
+                x = x1 + step * (x2 - x1)
+                y = y1 + step * (y2 - y1)
+                extended_path.append((x,y))
+        
+        
+        original_path = extended_path.copy()
+        smoothed_path :list[tuple[float, float]] = []
+        smoothed_path = extended_path.copy()
+
+        # -----gradient descent-----
+
+        total_change = np.inf 
+
+        while total_change > tolerance: 
+            
+            total_change = 0 
+            for i in range(1, len(smoothed_path) -1 ): # not iterate in the start and end 
+                
+                # we get the node of the smoothed path and the original node 
+                x, y = smoothed_path[i]
+                x_old, y_old = x, y
+                x_original, y_original = original_path[i]
+                
+                # CRITERIA 1 : it has to be near the original value 
+                #criteria1 = node - original_node 
+
+                x+= data_weight * (x_original - x)
+                y+= data_weight * (y_original - y)
+
+                
+                # CRITERIA 2 : it has to be near the average of its neighbours 
+                # criteria 2 = prev_node + next_node - 2 * node 
+                
+                x_prev, y_prev = smoothed_path[i-1]
+                x_next, y_next = smoothed_path[i+1]
+
+                x+= smooth_weight * (x_prev + x_next - 2 * x)
+                y+= smooth_weight * (y_prev + y_next - 2 * y)
+
+                # update the modified x and y of this node 
+                smoothed_path[i] = (x, y)
+
+                total_change += abs (x - x_old) + abs (y - y_old)
+
+
 
         return smoothed_path
 
@@ -342,13 +403,14 @@ class PRM:
                 node_2 = nodes[j]
 
                 dist = math.dist(node_1, node_2)
-
-                # 4. Condición de distancia umbral [cite: 50]
                 if dist <= connection_distance:
-                    # 5. Comprobar si la línea recta atraviesa obstáculos [cite: 52]
-                    # Usamos 'crosses' porque es más rápido que 'check_collision' [cite: 53]
-                    if not self.map.crosses(node_1, node_2):
-                        # 6. Como la conexión es bidireccional, añadimos ambos
+                    
+                    # Check if the line does not step into an obstacle
+                    # Create "crosses" (faster then check_collision)
+                  
+                    if not self._map.crosses([node_1, node_2]):
+                
+                        # Add both as the conexion is for both sides 
                         graph[node_1].append(node_2)
                         graph[node_2].append(node_1)
 
