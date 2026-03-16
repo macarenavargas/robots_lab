@@ -118,6 +118,7 @@ class PurePursuitNode(LifecycleNode):
 
         path.append((x, y))
         self.path = path 
+        return 
 
 
 
