@@ -1,3 +1,4 @@
+import numpy as np 
 class PurePursuit:
     """Class to follow a path using a simple pure pursuit controller."""
 
@@ -22,6 +23,9 @@ class PurePursuit:
         self._lookahead_distance: float = lookahead_distance
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
+        self._v : float = 0.15
+        self._alpha_threshold:float = 0.6
+
 
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
         """Pure pursuit controller implementation.
@@ -37,8 +41,36 @@ class PurePursuit:
 
         """
         # TODO: 4.11. Complete the function body with your code (i.e., compute v and w).
-        v = 0.0
-        w = 0.0
+        if not self._path:
+            return 0.0, 0.0
+        
+        v= self._v
+        
+
+        # get the closest and target points 
+        closest_xy, closest_idx = self._find_closest_point(x,y)
+        target_xy = self._find_target_point((x, y),closest_idx )
+        x_target,y_target = target_xy
+
+        # follow the formulas :
+        # l = distance between target and current location
+        l = np.linalg.norm(np.array((x,y)) - np.array( target_xy))
+        if l < 1e-6:
+            return 0.0, 0.0
+
+        # calculate angle B 
+        beta = np.arctan2(y_target - y,x_target - x)
+        alpha = beta - theta 
+        alpha = (alpha + np.pi) % (2 * np.pi) - np.pi  # normalize
+
+        w = 2 * v * np.sin(alpha) / l
+
+        # if alpha is large -> make the robot rotate over itself
+    
+        if abs(alpha) > self._alpha_threshold: 
+            v = 0.0 
+            #w = np.sin(alpha) * 0.8
+            w = 1.5 * alpha
 
         return v, w
 
@@ -68,6 +100,18 @@ class PurePursuit:
         closest_xy = (0.0, 0.0)
         closest_idx = 0
 
+        closest_distance = np.inf
+
+        for i in range(len(self.path)):
+            x_node, y_node = self.path[i]
+            distance = np.linalg.norm(np.array((x,y) ) - np.array( (x_node,y_node )))
+            if distance < closest_distance: 
+                closest_xy = (x_node, y_node)
+                closest_idx = i 
+                closest_distance = distance 
+
+                                
+        
         return closest_xy, closest_idx
 
     def _find_target_point(
@@ -85,5 +129,16 @@ class PurePursuit:
         """
         # TODO: 4.10. Complete the function body with your code (i.e., determine target_xy).
         target_xy = (0.0, 0.0)
+
+        for i in range(origin_idx, len(self.path)): 
+
+            distance = np.linalg.norm(np.array(self.path[i]) - np.array(origin_xy))
+            if distance >= self._lookahead_distance: 
+                target_xy = self.path[i]
+                return target_xy
+
+        
+        if target_xy == (0.0, 0.0): 
+            target_xy = self.path[-1] # return goal 
 
         return target_xy
