@@ -115,15 +115,16 @@ class ParticleFilterNode(LifecycleNode):
             )
 
             if self._simulation:
+                # synchronized subscribers with join callback
                 self._subscribers: list[message_filters.Subscriber] = []
                 self._subscribers.append(
                     message_filters.Subscriber(
-                        self, Odometry, "odometry", qos_profile=scan_qos_profile
+                        self, Odometry, "/odometry", qos_profile=scan_qos_profile
                     )
                 )
                 self._subscribers.append(
                     message_filters.Subscriber(
-                        self, LaserScan, "scan", qos_profile=scan_qos_profile
+                        self, LaserScan, "/scan", qos_profile=scan_qos_profile
                     )
                 )
 
@@ -132,8 +133,9 @@ class ParticleFilterNode(LifecycleNode):
                 )
                 ts.registerCallback(self._compute_pose_callback)
 
-            # Publisher for movement control
-            if not self._simulation:
+            
+            else: 
+                # separate subscribers with individual call backs                
                 self._subscriber_odom = self.create_subscription(
                     Odometry,
                     "/odometry",
@@ -143,11 +145,11 @@ class ParticleFilterNode(LifecycleNode):
                 self._subscriber_scan = self.create_subscription(
                     LaserScan, "/scan", callback=self._scan_callback, qos_profile=scan_qos_profile
                 )
-
+                # Motion Control publisher
                 self._publisher_motion_control = self.create_publisher(
                     MotionControl, "/motion_control", qos_profile=10
                 )
-
+                # Timer 
                 self._timer = self.create_timer(self._timer_period, self._timer_callback)
 
         except Exception:
