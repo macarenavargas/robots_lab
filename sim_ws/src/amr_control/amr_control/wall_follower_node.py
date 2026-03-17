@@ -91,8 +91,9 @@ class WallFollowerNode(LifecycleNode):
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
 
             if enable_localization:
+            
                 self._subscribers.append(message_filters.Subscriber(self, PoseStamped, "/pose", qos_profile=qos_profile))
-
+                
             ts = None
 
             if self._simulation:

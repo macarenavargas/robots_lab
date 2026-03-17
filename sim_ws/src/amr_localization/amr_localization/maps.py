@@ -19,7 +19,7 @@ class Map:
         sensor_range: float,
         safety_distance: float = 0.0,
         use_regions: bool = True,
-        compiled_intersect: bool = True,
+        compiled_intersect: bool = False,
     ):
         """Map class initializer.
 
