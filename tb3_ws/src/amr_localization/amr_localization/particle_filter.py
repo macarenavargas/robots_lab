@@ -173,42 +173,32 @@ class ParticleFilter:
         """
         self._iteration += 1
 
-
         # TODO: 3.5. Complete the function body with your code.
-
-        n_particles = len(self._particles)
-
-        # Calcualte gaussian noise for all particles
-        v_gauss = v + np.random.normal(0, self._sigma_v, n_particles)
-        w_gauss = w + np.random.normal(0, self._sigma_w, n_particles)
-
-        # extract value arrays
-        x_prev = self._particles[:, 0]
-        y_prev = self._particles[:, 1]
-        theta_prev = self._particles[:, 2]
-
-        # calulate y position
-        x_new = x_prev + v_gauss * np.cos(theta_prev) * self._dt
-        # calulate y position
-        y_new = y_prev + v_gauss * np.sin(theta_prev) * self._dt
-        # calulate theta and normalize so that the value is between [0,2pi]
-        if self._simulation:
-            theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi) # o +
-        else:
-            theta_new = (theta_prev + w_gauss * self._dt) % (2 * math.pi) # o -?
-
+        
+        self._logger.info(f"odometry: {v,w}")
         # we update the pose and orentation of each particle
-        for i in range(n_particles):
-            intersection, _ = self._map.check_collision([(x_prev[i], y_prev[i]), (x_new[i], y_new[i])], False)
+        for i in range(len(self._particles)):
+            # add gaussian noise to v and w
+            v_gauss = v + np.random.normal(0, self._sigma_v)
+            w_gauss = w + np.random.normal(0, self._sigma_w)
+            x_prev, y_prev, theta_prev = self._particles[i]
+            # calulate x position
+            x_new = x_prev + v_gauss * np.cos(theta_prev) * self._dt
+            # calulate y position
+            y_new = y_prev + v_gauss * np.sin(theta_prev) * self._dt
+            # calulate theta and normalize so that the value is between [0,2pi]
+            theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
+
+            # calculate if its outside the allowed boundaries
+            intersection, _ = self._map.check_collision([(x_prev, y_prev), (x_new, y_new)], False)
+
             # if it update x and y to the first intersection point
             if intersection:
-           
-                x_new[i] = intersection[0]
-                y_new[i] = intersection[1]
-
-        self._particles[:, 0] = x_new
-        self._particles[:, 1] = y_new
-        self._particles[:, 2] = theta_new
+                x_new = intersection[0]
+                y_new = intersection[1]
+            # update the particle's pose
+            
+            self._particles[i] = (x_new, y_new, theta_new)
 
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.

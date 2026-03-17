@@ -37,7 +37,7 @@ class OdometryNode(Node):  # Nodes inherit from the base class Node
 
         # obtain orientation (translate from  quaternion to Euler/Yaw)
         q = msg.pose.pose.orientation
-        quart_list = [q.x, q.y, q.z, q.w]
+        quart_list = [q.w, q.x, q.y, q.z]
         (roll, pitch, yaw) = quat2euler(quart_list)
         current_theta = yaw
 
@@ -68,20 +68,20 @@ class OdometryNode(Node):  # Nodes inherit from the base class Node
         elif d_theta < -math.pi:
             d_theta += 2 * math.pi
   
-        # linear velocity
-        dist = math.sqrt(dx**2 + dy**2)
-        v = dist / dt
-        
-
+        # # linear velocity
+        # dist = math.sqrt(dx**2 + dy**2)
+        # v = dist / dt
+        dist_projected = dx * math.cos(current_theta) + dy * math.sin(current_theta)
+        v = dist_projected / dt
         # obtain linear velocity sign , if movement goes on the other orientation 
-        angle_move = math.atan2(dy, dx)
-        angle_diff = angle_move - current_theta
-        # Normalize angle_diff
-        if angle_diff > math.pi: angle_diff -= 2*math.pi
-        if angle_diff < -math.pi: angle_diff += 2*math.pi
+        # angle_move = math.atan2(dy, dx)
+        # angle_diff = angle_move - current_theta
+        # # Normalize angle_diff
+        # if angle_diff > math.pi: angle_diff -= 2*math.pi
+        # if angle_diff < -math.pi: angle_diff += 2*math.pi
         
-        if abs(angle_diff) > (math.pi / 2):
-            v = -v
+        # if abs(angle_diff) > (math.pi / 2):
+        #     v = -v
 
         # Angular
         w = d_theta / dt
