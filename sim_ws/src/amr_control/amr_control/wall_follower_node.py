@@ -88,6 +88,11 @@ class WallFollowerNode(LifecycleNode):
                 message_filters.Subscriber(self, LaserScan, "/scan", qos_profile=qos_profile)
             )
 
+            # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
+
+            if enable_localization:
+                self._subscribers.append(message_filters.Subscriber(self, PoseStamped, "/pose", qos_profile=qos_profile))
+
             ts = None
 
             if self._simulation:
@@ -112,7 +117,7 @@ class WallFollowerNode(LifecycleNode):
                     qos_profile=10,
                 )
 
-            # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
+            
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
