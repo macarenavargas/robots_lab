@@ -205,6 +205,8 @@ class ParticleFilterNode(LifecycleNode):
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z
 
+        self._logger.info(f"odometry message {odom_msg}")
+
         noise_threshold = 1e-3
         if abs(z_v) > noise_threshold or abs(z_w) > noise_threshold:
             self._odom_measurements.append((z_v, z_w))
