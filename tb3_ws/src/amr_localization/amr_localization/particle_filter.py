@@ -173,33 +173,42 @@ class ParticleFilter:
         """
         self._iteration += 1
 
+
         # TODO: 3.5. Complete the function body with your code.
 
+        n_particles = len(self._particles)
+
+        # Calcualte gaussian noise for all particles
+        v_gauss = v + np.random.normal(0, self._sigma_v, n_particles)
+        w_gauss = w + np.random.normal(0, self._sigma_w, n_particles)
+
+        # extract value arrays
+        x_prev = self._particles[:, 0]
+        y_prev = self._particles[:, 1]
+        theta_prev = self._particles[:, 2]
+
+        # calulate y position
+        x_new = x_prev + v_gauss * np.cos(theta_prev) * self._dt
+        # calulate y position
+        y_new = y_prev + v_gauss * np.sin(theta_prev) * self._dt
+        # calulate theta and normalize so that the value is between [0,2pi]
+        if self._simulation:
+            theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi) # o +
+        else:
+            theta_new = (theta_prev + w_gauss * self._dt) % (2 * math.pi) # o -?
+
         # we update the pose and orentation of each particle
-        for i in range(len(self._particles)):
-            # add gaussian noise to v and w
-            v_gauss = v + np.random.normal(0, self._sigma_v)
-            w_gauss = w + np.random.normal(0, self._sigma_w)
-            x_prev, y_prev, theta_prev = self._particles[i]
-            # calulate x position
-            x_new = x_prev + v_gauss * np.cos(theta_prev) * self._dt
-            # calulate y position
-            y_new = y_prev + v_gauss * np.sin(theta_prev) * self._dt
-            # calulate theta and normalize so that the value is between [0,2pi]
-            if self._simulation:
-               theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
-            else:
-                theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
-
-            # calculate if its outside the allowed boundaries
-            intersection, _ = self._map.check_collision([(x_prev, y_prev), (x_new, y_new)], False)
-
+        for i in range(n_particles):
+            intersection, _ = self._map.check_collision([(x_prev[i], y_prev[i]), (x_new[i], y_new[i])], False)
             # if it update x and y to the first intersection point
             if intersection:
-                x_new = intersection[0]
-                y_new = intersection[1]
-            # update the particle's pose
-            self._particles[i] = (x_new, y_new, theta_new)
+           
+                x_new[i] = intersection[0]
+                y_new[i] = intersection[1]
+
+        self._particles[:, 0] = x_new
+        self._particles[:, 1] = y_new
+        self._particles[:, 2] = theta_new
 
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
@@ -221,14 +230,14 @@ class ParticleFilter:
 
         if W == 0:
            
-            weights = np.ones(self._particle_count) / self._particle_count
+            weights = np.ones(self._particle_count) / N
         else:
           
             weights = weights / W
 
         # create an array with the cumulative sum
         weight_ruler = np.cumsum(weights)
-        N = self._particle_count
+   
         step = 1.0 / N
         # take the first sample starting point
         start = np.random.uniform(0, step)
@@ -238,7 +247,8 @@ class ParticleFilter:
 
         # with digitize we asociate the selection points with their corresponding index in the weight ruler array
         new_idxs = np.digitize(selection_points, weight_ruler)
-        # new_idxs = np.minimum(new_idxs, self._particle_count - 1) # ??? error númerico
+        # no idnex beyond  N
+        new_idxs = np.clip(new_idxs, 0, N - 1)
         # we filter the array bu the selected idxs and update the particle list.
         self._particles = self._particles[new_idxs].copy()
     def _extract_robust_measurements(self, measurements: list[float], window_size: int = 3) -> np.ndarray:
@@ -533,7 +543,7 @@ class ParticleFilter:
         # take the particles ray measurements
         particle_measurements = self._sense(particle)
         # clean the nans of the particle's measurement, explain max
-        particle_measurements = np.nan_to_num(xºparticle_measurements, nan=self._sensor_range_max)
+        particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_max)
 
         # claculate the likelihood of the particle with the robot
         for i in range(self._num_rays):
