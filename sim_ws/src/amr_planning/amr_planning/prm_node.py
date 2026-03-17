@@ -31,6 +31,7 @@ class PRMNode(LifecycleNode):
         self.declare_parameter("use_grid", False)
         self.declare_parameter("world", "project")
 
+
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
 
@@ -92,6 +93,10 @@ class PRMNode(LifecycleNode):
 
             # Publishers
             # TODO: 4.6. Create the /path publisher (Path message).
+            self._publisher_path = self.create_publisher(
+                    msg_type= Path, topic="/path", qos_profile=10
+                )
+
             
             # Subscribers
             self._subscriber_pose = self.create_subscription(
@@ -157,8 +162,24 @@ class PRMNode(LifecycleNode):
 
         """
         # TODO: 4.7. Complete the function body with your code (i.e., replace the pass statement).
-        pass
         
+        msg = Path()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "map"
+        
+        for x,y in path: 
+            # for each point in the path list, we make a PoseStamp message 
+            # and add it to the "poses" field. 
+            pose_msg = PoseStamped()
+            pose_msg.pose.position.x = x
+            pose_msg.pose.position.y = y
+            pose_msg.pose.position.z = 0.0
+
+            msg.poses.append(pose_msg)
+        
+
+        self._publisher_path.publish(msg)
+
 
 def main(args=None):
     rclpy.init(args=args)

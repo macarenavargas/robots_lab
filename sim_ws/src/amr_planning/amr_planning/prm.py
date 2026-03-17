@@ -438,7 +438,7 @@ class PRM:
         """
         graph = self._generate_nodes(use_grid, node_count, grid_size)
         graph = self._connect_nodes(graph, connection_distance)
-
+        #print(len(graph))
         return graph
 
     def _generate_nodes(
@@ -462,6 +462,7 @@ class PRM:
         x_min, y_min, x_max, y_max = self._map.bounds()
 
         if not use_grid:
+            # cumpute random points with a uniform distributuion 
             while len(graph) < node_count:
                 x = random.uniform(x_min, x_max)
                 y = random.uniform(y_min, y_max)
@@ -472,6 +473,7 @@ class PRM:
                     graph[point] = []
 
         else:
+            # compute points that are equally spaced along the grid
             for x in np.arange(x_min, x_max, grid_size):
                 for y in np.arange(y_min, y_max, grid_size):
                     point = (round(x, 3), round(y, 3))
@@ -523,7 +525,12 @@ if __name__ == "__main__":
 
     # Create the roadmap
     start_time = time.perf_counter()
-    prm = PRM(map_path, use_grid=True, node_count=250, grid_size=0.1, connection_distance=0.15)
+    # node_count = 250 when use_grid = True 
+    #prm = PRM(map_path, use_grid=True, node_count=250, grid_size   =0.1, connection_distance=0.15)
+    #prm = PRM(map_path, use_grid=False, node_count=300, grid_size   =0.1, connection_distance=0.3)
+    
+    prm = PRM(map_path, use_grid=False, node_count= 300, grid_size   =0.1, connection_distance=0.3)
+    
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")

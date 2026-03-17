@@ -54,6 +54,7 @@ class PurePursuitNode(LifecycleNode):
             self._subscriber_pose = self.create_subscription(
                 PoseStamped, "pose", self._compute_commands_callback, 10
             )
+
             self._subscriber_path = self.create_subscription(Path, "path", self._path_callback, 10)
 
         except Exception:
@@ -108,7 +109,19 @@ class PurePursuitNode(LifecycleNode):
 
         """
         # TODO: 4.8. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+        path = []
+
+        for pose in path_msg.poses: 
+
+            x = pose.pose.position.x
+            y = pose.pose.position.y
+
+        path.append((x, y))
+        self.path = path 
+        return 
+
+
+
         
     def _publish_velocity_commands(self, v: float, w: float) -> None:
         """Publishes velocity commands in a geometry_msgs.msg.TwistStamped message.
