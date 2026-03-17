@@ -77,7 +77,7 @@ class ParticleFilterNode(LifecycleNode):
             self._last_z_scan = None
             self._odom_measurements = []
 
-            self._timer_period = 5
+            self._timer_period = 4
 
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")

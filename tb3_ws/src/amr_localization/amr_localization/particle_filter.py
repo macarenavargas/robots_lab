@@ -186,7 +186,10 @@ class ParticleFilter:
             # calulate y position
             y_new = y_prev + v_gauss * np.sin(theta_prev) * self._dt
             # calulate theta and normalize so that the value is between [0,2pi]
-            theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
+            if self._simulation:
+               theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
+            else:
+                theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
 
             # calculate if its outside the allowed boundaries
             intersection, _ = self._map.check_collision([(x_prev, y_prev), (x_new, y_new)], False)
@@ -207,18 +210,7 @@ class ParticleFilter:
         """
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
 
-        num_total_measurements = len(measurements)
-        # extract the idx of the selected rays we will analyze
-        idxs_real = np.linspace(0, num_total_measurements - 1, self._num_rays, dtype=int)
-        measurements = np.array(measurements)[idxs_real]
-
-        measurements[np.isinf(measurements)] = np.nan
-
-        if self._simulation:
-            measurements = np.nan_to_num(measurements, nan=self._sensor_range_min)
-        else:
-            measurements[measurements < self._sensor_range_min] = np.nan
-            measurements = np.nan_to_num(measurements, nan=self._sensor_range_max)
+        measurements = self._extract_robust_measurements(measurements)
 
         # calculate the weights for each particel (their probability)
         weights = np.array(
@@ -227,10 +219,17 @@ class ParticleFilter:
         N = self._particle_count
         W = np.sum(weights)
 
+        if W == 0:
+           
+            weights = np.ones(self._particle_count) / self._particle_count
+        else:
+          
+            weights = weights / W
+
         # create an array with the cumulative sum
         weight_ruler = np.cumsum(weights)
         N = self._particle_count
-        step = W / N
+        step = 1.0 / N
         # take the first sample starting point
         start = np.random.uniform(0, step)
 
@@ -239,10 +238,69 @@ class ParticleFilter:
 
         # with digitize we asociate the selection points with their corresponding index in the weight ruler array
         new_idxs = np.digitize(selection_points, weight_ruler)
-
+        # new_idxs = np.minimum(new_idxs, self._particle_count - 1) # ??? error númerico
         # we filter the array bu the selected idxs and update the particle list.
         self._particles = self._particles[new_idxs].copy()
+    def _extract_robust_measurements(self, measurements: list[float], window_size: int = 3) -> np.ndarray:
+        """Extracts and cleans LiDAR measurements depending on the environment.
+        
+        Applies a neighborhood search (window filter) for real-world noisy data, 
+        and a simple cleanup for perfect simulation data.
+        """
+        num_total_measurements = len(measurements)
+        idxs_real = np.linspace(0, num_total_measurements - 1, self._num_rays, dtype=int)
+        
+        raw_measurements = np.array(measurements)
+        raw_measurements[np.isinf(raw_measurements)] = np.nan
 
+        robust_measurements = []
+
+        if self._simulation:
+            # --- MODO SIMULACIÓN ---
+            # El simulador es perfecto. Si devuelve un NaN (infinito), significa 
+            # que el rayo no chocó con nada. Asignamos el rango máximo.
+            for idx in idxs_real:
+                val = raw_measurements[idx]
+                if np.isnan(val):
+                    robust_measurements.append(self._sensor_range_max)
+                else:
+                    robust_measurements.append(val)
+                    
+        else:
+            # --- MODO ROBOT REAL ---
+            # Filtramos los valores basura (el láser LDS-01 falla por debajo de 0.16m)
+            raw_measurements[raw_measurements < self._sensor_range_min] = np.nan
+            
+            for idx in idxs_real:
+                val = raw_measurements[idx]
+                
+                # Si el rayo principal es válido, genial
+                if not np.isnan(val):
+                    robust_measurements.append(val)
+                else:
+                    # Búsqueda de vecindad (Window Search)
+                    found_valid = False
+                    for offset in range(1, window_size + 1):
+                        # Miramos a la derecha
+                        idx_r = (idx + offset) % num_total_measurements
+                        if not np.isnan(raw_measurements[idx_r]):
+                            robust_measurements.append(raw_measurements[idx_r])
+                            found_valid = True
+                            break
+                            
+                        # Miramos a la izquierda
+                        idx_l = (idx - offset) % num_total_measurements
+                        if not np.isnan(raw_measurements[idx_l]):
+                            robust_measurements.append(raw_measurements[idx_l])
+                            found_valid = True
+                            break
+                    
+                    # Si toda la vecindad es NaN, devolvemos NaN. 
+                    # Esto indicará a la probabilidad que ignore este rayo.
+                    if not found_valid:
+                        robust_measurements.append(float('nan'))
+
+        return np.array(robust_measurements)
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
 
@@ -475,10 +533,11 @@ class ParticleFilter:
         # take the particles ray measurements
         particle_measurements = self._sense(particle)
         # clean the nans of the particle's measurement, explain max
-        particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_max)
+        particle_measurements = np.nan_to_num(xºparticle_measurements, nan=self._sensor_range_max)
 
         # claculate the likelihood of the particle with the robot
         for i in range(self._num_rays):
-            probability *= self._gaussian(particle_measurements[i], self._sigma_z, measurements[i])
+            if not np.isnan(measurements[i]):
+                probability *= self._gaussian(particle_measurements[i], self._sigma_z, measurements[i])
 
         return probability
