@@ -179,8 +179,6 @@ class ParticleFilterNode(LifecycleNode):
         # b) MOVEMENT: execute as many motion steps as measurementes acumulated in odometry
         num_measurements = len(self._odom_measurements)
         if num_measurements > 0:
-            real_dt = self._timer_period / num_measurements # Asumiendo que el timer original es de 5s
-            self._particle_filter._dt = real_dt
             for z_v, z_w in self._odom_measurements:
                 self._execute_motion_step(z_v, z_w)
 
