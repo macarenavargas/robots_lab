@@ -20,7 +20,7 @@ class WallFollowerNode(LifecycleNode):
         super().__init__("wall_follower")
 
         # Parameters
-        self.declare_parameter("dt", 0.1)  # simulation 0.05
+        self.declare_parameter("dt", 0.05)  # simulation 0.05, real 0.1
         self.declare_parameter("enable_localization", False)
         self.declare_parameter("simulation", False)
 
