@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 
 from amr_msgs.msg import PoseStamped as AmrPoseStamped
 from geometry_msgs.msg import PoseStamped
@@ -93,11 +94,16 @@ class PRMNode(LifecycleNode):
 
             # Publishers
             # TODO: 4.6. Create the /path publisher (Path message).
-            self._publisher_path = self.create_publisher(
-                    msg_type= Path, topic="/path", qos_profile=10
-                )
+            #self._publisher_path = self.create_publisher(msg_type= Path, topic="/path", qos_profile=10)
+            qos = QoSProfile(depth=10)
+            qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
 
-            
+            self._publisher_path = self.create_publisher(
+                msg_type=Path,
+                topic="/path",
+                qos_profile=qos,
+            )
+                        
             # Subscribers
             self._subscriber_pose = self.create_subscription(
                 AmrPoseStamped, "pose", self._path_callback, 10
@@ -136,7 +142,7 @@ class PRMNode(LifecycleNode):
 
             self.get_logger().info(f"Pathfinding time: {pathfinding_time:1.3f} s")
 
-            start_time = time.perf_counter()
+           
             smoothed_path = PRM.smooth_path(
                 path,
                 data_weight=self._smoothing_data_weight,
@@ -171,14 +177,20 @@ class PRMNode(LifecycleNode):
             # for each point in the path list, we make a PoseStamp message 
             # and add it to the "poses" field. 
             pose_msg = PoseStamped()
+            pose_msg.header.stamp = self.get_clock().now().to_msg()
+            pose_msg.header.frame_id = "map"
+
             pose_msg.pose.position.x = x
             pose_msg.pose.position.y = y
             pose_msg.pose.position.z = 0.0
+
+            pose_msg.pose.orientation.w = 1.0
 
             msg.poses.append(pose_msg)
         
 
         self._publisher_path.publish(msg)
+        print(" message of path published with ", len(path), " points")
 
 
 def main(args=None):

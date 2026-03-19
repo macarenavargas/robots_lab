@@ -5,7 +5,7 @@ class PurePursuit:
     def __init__(
         self,
         dt: float,
-        lookahead_distance: float = 0.5,
+        lookahead_distance: float = 0.3,
         logger=None,
         simulation: bool = False,
     ):
@@ -23,8 +23,8 @@ class PurePursuit:
         self._lookahead_distance: float = lookahead_distance
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
-        self._v : float = 0.15
-        self._alpha_threshold:float = 0.6
+        self._v : float = 0.1
+        self._alpha_threshold:float = 0.8
 
 
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
@@ -49,7 +49,8 @@ class PurePursuit:
 
         # get the closest and target points 
         closest_xy, closest_idx = self._find_closest_point(x,y)
-        target_xy = self._find_target_point((x, y),closest_idx )
+        target_xy = self._find_target_point(closest_xy,closest_idx )
+        #target_xy = self._find_target_point((x,y),closest_idx )
         x_target,y_target = target_xy
 
         # follow the formulas :
@@ -68,9 +69,12 @@ class PurePursuit:
         # if alpha is large -> make the robot rotate over itself
     
         if abs(alpha) > self._alpha_threshold: 
-            v = 0.0 
+
+            v = 0.0
+            #v = 0.05
             #w = np.sin(alpha) * 0.8
-            w = 1.5 * alpha
+            #w = 1.5 * alpha
+            w = np.clip(1.5 * alpha, -1.0, 1.0)
 
         return v, w
 
@@ -114,7 +118,7 @@ class PurePursuit:
         
         return closest_xy, closest_idx
 
-    def _find_target_point(
+    def _find_target_point_1(
         self, origin_xy: tuple[float, float], origin_idx: int
     ) -> tuple[float, float]:
         """Find the destination path point based on the lookahead distance.
@@ -139,6 +143,26 @@ class PurePursuit:
 
         
         if target_xy == (0.0, 0.0): 
-            target_xy = self.path[-1] # return goal 
+            #target_xy = self.path[-1] # return goal 
+            return target_xy
 
         return target_xy
+
+
+    def _find_target_point(self, origin_xy: tuple[float, float], origin_idx: int) -> tuple[float, float]:
+        target_xy = self.path[-1]
+        accumulated = 0.0
+        prev = origin_xy
+        for i in range(origin_idx + 1, len(self.path)):
+            curr = self.path[i]
+            accumulated += np.linalg.norm(np.array(curr) - np.array(prev))
+
+            if accumulated >= self._lookahead_distance:
+
+                return curr
+
+            prev = curr
+
+        return target_xy
+ 
+    

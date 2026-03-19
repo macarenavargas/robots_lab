@@ -117,6 +117,12 @@ class PRM:
         closest_node_start = self._find_closest(start)
         closest_node_goal = self._find_closest(goal)
 
+        if closest_node_start is None: 
+            print(" The start point is not valid, no node in the graph")
+
+        if closest_node_goal is None:
+            print(" The goal point is not valid, no node in the graph")
+
 
         # 2. Initilize the open and close list. 
         open_list: dict[tuple[float, float], tuple[float, float]] = {}
@@ -215,21 +221,20 @@ class PRM:
         # -----add the new intermediate nodes -----
         for i in range(len(path) - 1): 
 
-            node1 = path[i]
-            x1, y1 = node1
-            node2 = path[i+1]
-            x2, y2 = node2
-            extended_path.append(node1)
+      
+            x1, y1 = path[i]
+            x2, y2 = path[i+1]
+            extended_path.append((x1, y1))
 
             for j in range(additional_smoothing_points): 
                 # we make the linear interpolation 
-                step = (j + 1)/ additional_smoothing_points
+                step = (j + 1)/ (additional_smoothing_points+1)
 
                 x = x1 + step * (x2 - x1)
                 y = y1 + step * (y2 - y1)
                 extended_path.append((x,y))
         
-        
+        extended_path.append(path[-1])
         original_path = extended_path.copy()
         smoothed_path :list[tuple[float, float]] = []
         smoothed_path = extended_path.copy()
@@ -255,7 +260,7 @@ class PRM:
                 y+= data_weight * (y_original - y)
 
                 
-                # CRITERIA 2 : it has to be near the average of its neighbours 
+                # CRITERIA 2 : it has to be near its neighbours 
                 # criteria 2 = prev_node + next_node - 2 * node 
                 
                 x_prev, y_prev = smoothed_path[i-1]
@@ -397,6 +402,7 @@ class PRM:
         nodes = list(graph.keys())
         num_nodes = len(nodes)
 
+       
         for i in range(num_nodes):
             for j in range(i + 1, num_nodes):
                 node_1 = nodes[i]
@@ -407,12 +413,18 @@ class PRM:
                     
                     # Check if the line does not step into an obstacle
                     # Create "crosses" (faster then check_collision)
-                  
+                    #print(self._map.crosses([node_1, node_2]))
                     if not self._map.crosses([node_1, node_2]):
                 
                         # Add both as the conexion is for both sides 
                         graph[node_1].append(node_2)
                         graph[node_2].append(node_1)
+         #----checks----
+        total_edges = sum(len(v) for v in graph.values())
+        print("nodes:", len(graph))
+        print("total neighbor refs:", total_edges)
+        isolated = sum(1 for v in graph.values() if len(v) == 0)
+        print("isolated nodes:", isolated)
 
         return graph
 
@@ -504,14 +516,14 @@ class PRM:
 
         # TODO: 4.4. Complete the missing function body with your code.
 
-        node = goal 
-        # starting from the end, we reconstruct the path 
-        while node!= start :
-            
-            path.append(node)
-            node =  ancestors[node]
+        node = goal
+        node = goal
+        path = [node]
 
-        path.append(start)
+        while node in ancestors:
+            node = ancestors[node]
+            path.append(node)
+
         path.reverse()
 
         return path
@@ -526,10 +538,10 @@ if __name__ == "__main__":
     # Create the roadmap
     start_time = time.perf_counter()
     # node_count = 250 when use_grid = True 
-    #prm = PRM(map_path, use_grid=True, node_count=250, grid_size   =0.1, connection_distance=0.15)
+    prm = PRM(map_path, use_grid=True, node_count=250, grid_size   =0.1, connection_distance=0.15)
     #prm = PRM(map_path, use_grid=False, node_count=300, grid_size   =0.1, connection_distance=0.3)
     
-    prm = PRM(map_path, use_grid=False, node_count= 300, grid_size   =0.1, connection_distance=0.3)
+    #prm = PRM(map_path, use_grid=False, node_count= 300, grid_size   =0.1, connection_distance=0.3)
     
     roadmap_creation_time = time.perf_counter() - start_time
 
