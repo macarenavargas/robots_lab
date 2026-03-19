@@ -6,8 +6,10 @@ from enum import Enum, auto
 class State(Enum):
     DECIDE_SIDE = auto()
     FIND_WALL = auto()
+    ALIGN_WALL = auto()
     FOLLOW_WALL = auto()
-    CORNER = auto()
+    INNER_CORNER = auto()
+    OUTER_CORNER = auto()
 
 
 class WallFollower:
@@ -29,7 +31,7 @@ class WallFollower:
     WALL_FOUND_VAL = 0.8  # Distance to consider new wall found [m]
     TURN_ANGLE_TARGET = (
         math.pi / 2
-    )   # Angle the rpbot has to tu acomploish when in enters corner state
+    )  # Angle the rpbot has to tu acomploish when in enters corner state
 
     def __init__(self, dt: float, logger=None, simulation: bool = False) -> None:
         """Wall following class initializer.
@@ -49,12 +51,12 @@ class WallFollower:
         self._angle_turned = 0.0  # used to acumulate angle to know how much the robot has turned
 
         if simulation:
-            self.K_p = 1.2    
+            self.K_p = 2
             self.K_d = 0.9
         else:
             # too high!! try Kp 3 to 5
-            self.K_p = 2 #6 # 2
-            self.K_d = 1#5# 1
+            self.K_p = 2  # 6 # 2
+            self.K_d = 1  # 5# 1
 
         self._prev_error = 0.0
 
@@ -82,18 +84,31 @@ class WallFollower:
 
         # extract from the scan array the set of values we need
 
-        d_front, d_left, d_right = self._get_sensor_readings(clean_scan)
+        # d_front, d_left, d_right = self._get_sensor_readings(clean_scan)
+        d_front, d_left, d_right, d_front_left, d_front_right = self._get_sensor_readings(
+            clean_scan
+        )
 
         # Update control variables
         distance_to_current_wall, distance_to_other_wall = self._get_wall_distances(d_left, d_right)
 
         # state machine logic: transitions
+        # self._update_state_machine(
+        # d_front, distance_to_current_wall, distance_to_other_wall, d_left, d_right, z_w
+        # )
         self._update_state_machine(
-            d_front, distance_to_current_wall, distance_to_other_wall, d_left, d_right, z_w
+            d_front,
+            distance_to_current_wall,
+            distance_to_other_wall,
+            d_left,
+            d_right,
+            d_front_left,
+            d_front_right,
+            z_w,
         )
 
         # state machine logic: definition of each state
-        v_cmd, w_cmd= self._compute_actions_based_on_state(distance_to_current_wall)
+        v_cmd, w_cmd = self._compute_actions_based_on_state(distance_to_current_wall)
         # contrains to respect the phisical limits of the robot
         v, w = self._saturate_commands(v_cmd, w_cmd)
 
@@ -101,7 +116,6 @@ class WallFollower:
             self._logger.info(
                 f"[{self._state.name}] Side:{'R' if self._side_sign == 1 else 'L'} | Front:{d_front:.2f} | Right:{d_right:.2f} |  Left: {d_left:.2f} | w:{w:.2f}"
             )
-
 
         if not self._simulation:
             w = -w
@@ -129,21 +143,20 @@ class WallFollower:
             return clean_scan
         else:
             return list(z_scan)
-        
-    
 
     def _get_robust_min(self, values: list[float]) -> float:
-       
+
         if self._simulation:
             valid_values = values
         else:
-            valid_values = [v for v in values if not math.isnan(v) and not math.isinf(v) and v > 0.0]
-        
-  
-        if not valid_values: 
+            valid_values = [
+                v for v in values if not math.isnan(v) and not math.isinf(v) and v > 0.0
+            ]
+
+        if not valid_values:
             return self.SENSOR_RANGE_MAX
-        
-        k = min(len(valid_values), 5) 
+
+        k = min(len(valid_values), 5)
         sorted_vals = sorted(valid_values)
         return sum(sorted_vals[:k]) / k
 
@@ -159,39 +172,70 @@ class WallFollower:
                 d_right: Distance to the closest obstacle on the right [m].
         """
 
-    
         if self._simulation:
-            d_right = min(scan[160:200])
+            # El LiDAR tiene 241 valores. 1 índice = 1.5 grados.
+
+            # FRENTE (Índice 0 y 240) -> +/- 7.5 grados
             d_front = min(scan[-5:] + scan[:5])
-            d_left = min(scan[40:80])
-            return d_front, d_left, d_right
+
+            # LATERAL IZQUIERDO (90º) -> Índice 60 (+/- 15 grados)
+            d_left = min(scan[50:70])
+
+            # LATERAL DERECHO (270º) -> Índice 180 (+/- 15 grados)
+            d_right = min(scan[170:190])
+
+            # DIAGONAL FRONT-IZQ (45º) -> Índice 30 (+/- 15 grados)
+            d_front_left = min(scan[20:40])
+
+            # DIAGONAL FRONT-DER (315º) -> Índice 210 (+/- 15 grados)
+            d_front_right = min(scan[200:220])
+
+            return d_front, d_left, d_right, d_front_left, d_front_right
 
         else:
             n = len(scan)
-            if n == 0: 
-                return self.SENSOR_RANGE_MAX, self.SENSOR_RANGE_MAX, self.SENSOR_RANGE_MAX 
+            if n == 0:
+                return (
+                    self.SENSOR_RANGE_MAX,
+                    self.SENSOR_RANGE_MAX,
+                    self.SENSOR_RANGE_MAX,
+                    self.SENSOR_RANGE_MAX,
+                    self.SENSOR_RANGE_MAX,
+                )
 
-            
             #  +/- 20 degrees range for left and right
             SIDE_APERTURE = 20
             #  +/- 10 degree range for front
-            FRONT_APERTURE = 5 
+            FRONT_APERTURE = 5
+            # +/- 15 degree for diagonals
+            DIAG_APERTURE = 15
 
-            # convert degrees into number of indexes/ lidar rays"
             rays_per_degree = n / 360.0
-            
+
             side_width = int(SIDE_APERTURE * rays_per_degree)
             front_width = int(FRONT_APERTURE * rays_per_degree)
+            diag_width = int(DIAG_APERTURE * rays_per_degree)
 
             fw = max(1, front_width)
             d_front = self._get_robust_min(scan[-fw:] + scan[:fw])
 
-            idx_left = int(n / 4)
+            idx_left = int(n / 4)  # 90 grados
             d_left = self._get_robust_min(scan[idx_left - side_width : idx_left + side_width])
 
-            idx_right = int(3 * n / 4)
+            idx_right = int(3 * n / 4)  # 270 grados
             d_right = self._get_robust_min(scan[idx_right - side_width : idx_right + side_width])
-            return d_front, d_left, d_right
+
+            idx_front_left = int(n / 8)  # 45 grados
+            d_front_left = self._get_robust_min(
+                scan[idx_front_left - diag_width : idx_front_left + diag_width]
+            )
+
+            idx_front_right = int(7 * n / 8)  # 315 grados
+            d_front_right = self._get_robust_min(
+                scan[idx_front_right - diag_width : idx_front_right + diag_width]
+            )
+
+            return d_front, d_left, d_right, d_front_left, d_front_right
 
     def _get_wall_distances(self, d_left: float, d_right: float) -> tuple[float, float]:
         """Determines distances to the followed wall and the opposite wall.
@@ -216,6 +260,8 @@ class WallFollower:
         distance_to_other_wall: float,
         d_left: float,
         d_right: float,
+        d_front_left: float,  # <--- NUEVO
+        d_front_right: float,  # <--- NUEVO
         z_w: float,
     ) -> None:
         """Updates the robot's state and side-following logic based on inputs from de sensor.
@@ -236,66 +282,142 @@ class WallFollower:
             else:
                 self._side_sign = 1
             self._state = State.FIND_WALL
+
+            if self._logger:
+                self._logger.info(
+                    f"DECISION: Seguimos la pared {'DERECHA' if self._side_sign == 1 else 'IZQUIERDA'}"
+                )
             return
 
-        # ---  Side Switching ---
-        # block change if the robot is turning
-        if self._state != State.CORNER:
+        # --- SeCURITY -> stop robot if wall to close ---
+        if self._state not in [State.INNER_CORNER, State.ALIGN_WALL]:
+            if d_front < self.MAX_FRONT_DISTANCE:
+                # ¡LA MAGIA DE LA INTERSECCIÓN ESTÁ AQUÍ!
+                # Antes de girar, decidimos qué lado nos conviene seguir
+                # para asegurarnos de girar hacia el lado abierto.
+                if d_left > d_right:
+                    # Hay más espacio a la izq. Queremos girar a la izq.
+                    # Para que INNER_CORNER gire a la izq, le decimos que la pared está a la der.
+                    self._side_sign = 1
+                else:
+                    self._side_sign = -1
+
+                self._state = State.INNER_CORNER
+                self._prev_error = 0.0
+                if self._logger:
+                    self._logger.info(
+                        f"EMERGENCIA: Frente a {d_front:.2f}m. "
+                        f"Espacio: L={d_left:.2f}, R={d_right:.2f}. "
+                        f"Cambio forzado a Side: {'R' if self._side_sign == 1 else 'L'}"
+                    )
+                return
+
+        # --- SIDE SWITCHING (Exploración dinámica) ---
+        # Solo permitimos cambiar de lado si estamos en modos "tranquilos"
+        if self._state in [State.FOLLOW_WALL, State.FIND_WALL]:
             should_switch = False
+
             if self._simulation:
-                if distance_to_current_wall > distance_to_other_wall:
+                # if distance_to_other_wall < distance_to_current_wall:
+                #     should_switch = True
+                HYSTERESIS = 0.15  # 15 cm de margen evita que oscile en pasillos
+                if distance_to_other_wall < (distance_to_current_wall - HYSTERESIS):
                     should_switch = True
             else:
-                # only switches wall if the other wall is clearly a better option to follow
-                HYSTERESIS = 0.1 # 
-                
+                HYSTERESIS = 0.15  # 15 cm de margen evita que oscile en pasillos
                 if distance_to_other_wall < (distance_to_current_wall - HYSTERESIS):
                     should_switch = True
 
             if should_switch:
-                self._side_sign *= -1 
-
-                
+                self._side_sign *= -1
                 self._prev_error = 0.0
-                self._state = State.FOLLOW_WALL
+
+                # Si cambiamos de lado, lo más seguro es forzar una alineación
+                # con la nueva pared antes de correr
+                self._state = State.ALIGN_WALL
+
+                if self._logger:
+                    self._logger.info(
+                        f"CAMBIO DE LADO: La pared {'derecha' if self._side_sign == 1 else 'izquierda'} es mejor. Alineando..."
+                    )
                 return
 
-        # --- State Transitions ---
-        if self._state == State.CORNER:
-            # robot has tu turn 90º before beign allowed to exir this state
-            if self._simulation:
-                self._angle_turned += abs(z_w) * self._dt
-            else:
-                self._angle_turned += 0.5 * self._dt
-            
-            if self._angle_turned >= self.TURN_ANGLE_TARGET:
-                self._state = State.FIND_WALL
-                self._prev_error = 0.0
-                self._angle_turned = 0.0
-        else:
-            if d_front < self.MAX_FRONT_DISTANCE:
-                # last check before turning?
-                # Before turning blindly, loook which side has more space IN REALIYY
-               
-                if not self._simulation:
-                    if d_left < d_right:
-                        # less space left , then wall at left -> follow left -> continue right 
-                        # Si hay menos hueco a la izq, la pared está a la izq -> sigo izq -> giro derecha
-                        self._side_sign = -1 
-                    elif d_left > d_right:
-                        # the same but with the right wall 
-                        self._side_sign = 1
-                self._state = State.CORNER
-                self._angle_turned = 0.0  # Reset integrator
-                self._prev_error = 0.0
-                return
+        # --- Find wall ---
+        if self._state == State.FIND_WALL:
+            # Si encontramos CUALQUIER pared cerca, empezamos a alinearnos
+            WALL_FOUND_VAL = 0.3
+            if distance_to_current_wall < WALL_FOUND_VAL or d_front < WALL_FOUND_VAL:
+                self._state = State.ALIGN_WALL
+                if self._logger:
+                    self._logger.info(
+                        f"PARED ENCONTRADA a {distance_to_current_wall:.2f}m. Iniciando alineación."
+                    )
+            return
 
-            elif distance_to_current_wall < 1.0:
-                # if the robot is not near a front wall, and it can detect a side wall
+        # ---- align with wall ---
+
+        if self._state == State.ALIGN_WALL:
+            # Seleccionamos qué diagonal vigilar en base a la pared que seguimos
+            d_diagonal = d_front_right if self._side_sign == 1 else d_front_left
+
+            # MAGIA GEOMÉTRICA:
+            # 1. El frente debe estar limpio (> 0.5)
+            # 2. La pared no se nos ha escapado (< 0.6)
+            # 3. La diagonal es al menos un 20% mayor que el lateral puro.
+            #    Esto garantiza matemáticamente que el robot ya no mira hacia la pared.
+            is_parallel = d_diagonal > (distance_to_current_wall * 1.2)
+
+            if d_front > 0.5 and distance_to_current_wall < 0.6 and is_parallel:
                 self._state = State.FOLLOW_WALL
+                self._prev_error = 0.0
+                if self._logger:
+                    self._logger.info(
+                        f"ALINEADO PERFECTO: Frente={d_front:.2f}, Lateral={distance_to_current_wall:.2f}, Diagonal={d_diagonal:.2f}"
+                    )
             else:
-                self._state = State.FIND_WALL
-        return 
+                if self._logger:
+                    self._logger.info(
+                        f"Alineando... Lat={distance_to_current_wall:.2f}, Diag={d_diagonal:.2f}"
+                    )
+            return
+        # --- Follow wall ---
+
+        if self._state == State.FOLLOW_WALL:
+            # Condición A: La pared lateral desaparece repentinamente (Intersección abierta)
+            if distance_to_current_wall > 0.6:
+                self._state = State.OUTER_CORNER
+                self._prev_error = 0.0
+                if self._logger:
+                    self._logger.info(
+                        f"PARED PERDIDA: Distancia lateral {distance_to_current_wall:.2f}m. Envolviendo esquina exterior..."
+                    )
+            # (La Condición B de chocar de frente ya está cubierta por la lógica de Seguridad Global arriba)
+            return
+
+        # ---- inner corner ---
+        if self._state == State.INNER_CORNER:
+            # Condición de salida: Hemos girado lo suficiente como para que el frente vuelva a estar despejado
+            if d_front > 0.45:
+                # Ya estamos alineados con la nueva pared
+                # self._state = State.FOLLOW_WALL
+                self._state = State.ALIGN_WALL
+                self._prev_error = 0.0
+                if self._logger:
+                    self._logger.info("ESQUINA INTERIOR: Frente despejado. Retomando seguimiento.")
+            return
+
+        # ---- outer corner ----
+        if self._state == State.OUTER_CORNER:
+            # Condición de salida: Al trazar el arco, volvemos a detectar la pared en el lateral
+            if distance_to_current_wall < 0.8:
+                self._state = State.FOLLOW_WALL
+                self._prev_error = 0.0
+                if self._logger:
+                    self._logger.info(
+                        f"ESQUINA exterior: Pared recuperada a {distance_to_current_wall:.2f}m. Retomando seguimiento."
+                    )
+            return
+
     def _compute_actions_based_on_state(
         self, distance_to_current_wall: float
     ) -> tuple[float, float]:
@@ -315,13 +437,16 @@ class WallFollower:
         if self._state == State.DECIDE_SIDE:
             return 0.0, 0.0
 
-        elif self._state == State.CORNER:
+        elif self._state == State.FIND_WALL:
+            # Avanza lento, giro leve hacia el lado elegido para "buscar" la pared
+            v = 0.1
+            w = 0.3 * self._side_sign
+
+        elif self._state == State.ALIGN_WALL:
+            # Giro sobre el eje central (pivotar). v=0 garantiza seguridad.
+            # Giramos alejándonos de la pared
             v = 0.0
-            # negative angular velocity turns the robot to the left
-            # if we are following the right wall = 1 -> -0.5*1 = -0.5 the robot will make a turn to the left
-            # if we are following the left wall = -1 -> -0.5*-1=0.5 the robot will make a turn to the right
             w = -0.5 * self._side_sign
-            self._prev_error = 0.0
 
         elif self._state == State.FOLLOW_WALL:
             v = self.VEL_REF
@@ -331,9 +456,8 @@ class WallFollower:
             # w = -self._side_sign * (self.K_p * error + self.K_d * derivative)
             pid_output = -self._side_sign * (self.K_p * error + self.K_d * derivative)
 
+            PID_LIMIT = 0.5
 
-            PID_LIMIT = 0.5 
-            
             if pid_output > PID_LIMIT:
                 w = PID_LIMIT
             elif pid_output < -PID_LIMIT:
@@ -343,12 +467,16 @@ class WallFollower:
 
             self._prev_error = error
 
-        elif self._state == State.FIND_WALL:
-            # in case the robot can't detect wall
-            v = 0.08
-            w = 0.45 * self._side_sign
-            self._prev_error = 0.0
-        
+        elif self._state == State.INNER_CORNER:
+            # Pivotar bruscamente para evitar la colisión frontal (rotación pura)
+            v = 0.0
+            w = -0.5 * self._side_sign
+
+        elif self._state == State.OUTER_CORNER:
+            # Trazar un arco ciego envolviendo la esquina.
+            # Avanza moderadamente y gira hacia la pared "perdida"
+            v = 0.12  # Velocidad algo reducida para no abrirse demasiado
+            w = 0.5 * self._side_sign  # Gira HACIA el lado de la pared
 
         return v, w
 
