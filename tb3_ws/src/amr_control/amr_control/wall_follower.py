@@ -83,6 +83,11 @@ class WallFollower:
 
         self.W_LIMIT_PID = 0.05  # 0.05
 
+
+        self._lost_wall_counter = 0
+        self.LOST_WALL_THRESHOLD = 3  # Necesita 3 lecturas seguidas (150ms) para creerse que no hay pared  
+        self._align_counter = 0
+
     def compute_commands(self, z_scan: list[float], z_v: float, z_w: float) -> tuple[float, float]:
         """Wall following exploration algorithm.
 
@@ -224,9 +229,9 @@ class WallFollower:
                 )
 
             #  +/- 20 degrees range for left and right
-            SIDE_APERTURE = 20
+            SIDE_APERTURE = 25
             #  +/- 10 degree range for front
-            FRONT_APERTURE = 5
+            FRONT_APERTURE = 10
             # +/- 15 degree for diagonals
             DIAG_APERTURE = 15
 
@@ -319,39 +324,100 @@ class WallFollower:
 
         # 2. MODO SEGUIMIENTO NOMINAL
         elif self._state == State.FOLLOW_WALL:
-            # Caso: Perdemos la pared que seguiamos
-            if d_current > self.DIST_WALL_LOST:
-                if d_other < self.DIST_WALL_CAPTURE:
-                    self._side_sign *= -1
-                    self._state = State.ALIGN_WALL
-                    if self._logger:
-                        self._logger.info(
-                            "TOPOLOGIA: Cambiando a pared opuesta por perdida de actual"
-                        )
-                else:
-                    self._state = State.OUTER_CORNER
-                    if self._logger:
-                        self._logger.info(
-                            "TOPOLOGIA: Pared perdida sin alternativa. Rodeando esquina"
-                        )
+           
+            if self._simulation:
+                # Caso: Perdemos la pared que seguiamos
+                if d_current > self.DIST_WALL_LOST:
+                    if d_other < self.DIST_WALL_CAPTURE:
+                        self._side_sign *= -1
+                        self._state = State.ALIGN_WALL
+                        if self._logger:
+                            self._logger.info(
+                                "TOPOLOGIA: Cambiando a pared opuesta por perdida de actual"
+                            )
+                    else:
+                        self._state = State.OUTER_CORNER
+                        if self._logger:
+                            self._logger.info(
+                                "TOPOLOGIA: Pared perdida sin alternativa. Rodeando esquina"
+                            )
 
-            # Caso: Existe una pared mucho mejor (Side Switching)
-            elif d_other < (d_current - self.SIDE_HYSTERESIS) and d_other < self.DIST_SIDE_MAX:
-                self._side_sign *= -1
-                self._state = State.FOLLOW_WALL
-                self._prev_error = 0.0
-                if self._logger:
-                    self._logger.info("OPTIMIZACION: Cambio de lado por proximidad")
+                # Caso: Existe una pared mucho mejor (Side Switching)
+                elif d_other < (d_current - self.SIDE_HYSTERESIS) and d_other < self.DIST_SIDE_MAX:
+                    self._side_sign *= -1
+                    self._state = State.FOLLOW_WALL
+                    self._prev_error = 0.0
+                    if self._logger:
+                        self._logger.info("OPTIMIZACION: Cambio de lado por proximidad")
+            else:
+                # --- FILTRO DE RUIDO (DEBOUNCING) ---
+                if d_current > self.DIST_WALL_LOST:
+                    self._lost_wall_counter += 1
+                else:
+                    self._lost_wall_counter = 0  # Si la pared vuelve, reseteamos la paciencia
+
+                # Caso: Perdemos la pared de verdad (confirmado por varios ciclos)
+                if self._lost_wall_counter >= self.LOST_WALL_THRESHOLD:
+                    
+                    if d_other < self.DIST_WALL_CAPTURE:
+                        self._side_sign *= -1
+                        self._state = State.ALIGN_WALL # O FOLLOW_WALL si ya aplicaste la corrección topológica
+                        self._lost_wall_counter = 0
+                        if self._logger:
+                            self._logger.info("TOPOLOGIA: Cambiando a pared opuesta por pérdida real")
+                    else:
+                        self._state = State.OUTER_CORNER
+                        self._lost_wall_counter = 0
+                        if self._logger:
+                            self._logger.info("TOPOLOGIA: Pared perdida confirmada. Esquina exterior.")
+
+                # Caso: Existe una pared mucho mejor (Side Switching)
+                elif d_other < (d_current - self.SIDE_HYSTERESIS) and d_other < self.DIST_SIDE_MAX:
+                    self._side_sign *= -1
+                    self._state = State.FOLLOW_WALL
+                    self._prev_error = 0.0
+                    if self._logger:
+                        self._logger.info("OPTIMIZACION: Cambio de lado por proximidad")
 
         # 3. MODO ALINEACION (Trigonometria Lidar)
         elif self._state == State.ALIGN_WALL:
-            d_diag = d_diag_r if self._side_sign == 1 else d_diag_l
-            # is_parallel = d_diag > (d_current * self.PARALLEL_MARGIN)
-            is_parallel = (d_current * 1.1) < d_diag < (d_current * 1.6)
+
+            if self._simulation:
+                d_diag = d_diag_r if self._side_sign == 1 else d_diag_l
+                # is_parallel = d_diag > (d_current * self.PARALLEL_MARGIN)
+                is_parallel = (d_current * 1.1) < d_diag < (d_current * 1.6)
+            else:
+                d_diag = d_diag_r if self._side_sign == 1 else d_diag_l
+            
+                # --- CÁLCULO DEL RATIO ROBUSTO ---
+             
+                ratio_actual = d_diag / d_current
+                
+                
+                # Condición estricta: El ideal trigonométrico es la raíz de 2 (1.41). 
+                # Apretamos la ventana matemática para evitar salidas prematuras.
+                # is_parallel_math = 1.30 < ratio_actual < 1.48
+                is_parallel = 1.35 < ratio_actual < 1.45
+                # --- is_parallel_math DE CONFIRMACIÓN ---
+                # if is_parallel_math:
+                #     self._align_counter += 1
+                # else:
+                #     self._align_counter = 0
+
+                # is_parallel = self._align_counter >= 2
+
+                # --- LOGGER DE DIAGNÓSTICO (RAYOS X) ---
+                if self._logger:
+                    self._logger.info(
+                        f"[ALIGN DEBUG] Side: {'R' if self._side_sign == 1 else 'L'} | "
+                        f"d_curr: {d_current:.2f}m | d_diag: {d_diag:.2f}m | "
+                        f"Ratio: {ratio_actual:.2f} | Parallel: {is_parallel}"
+                    )
 
             # Escape 1: ¡NUEVO! Abortar si la pared desaparece en mitad del giro
             if d_current > self.DIST_WALL_LOST:
                 self._state = State.FIND_WALL
+                self._align_counter = 0
                 if self._logger:
                     self._logger.info("ABORTAR ALINEACION: La pared desapareció durante el giro")
                 return
@@ -364,6 +430,7 @@ class WallFollower:
             ):
                 self._state = State.FOLLOW_WALL
                 self._prev_error = 0.0
+                self._align_counter = 0
                 if self._logger:
                     self._logger.info("ESTADO: FOLLOW_WALL. Alineacion correcta")
 
