@@ -33,11 +33,6 @@ class WallFollower:
         math.pi / 2
     )  # Angle the rpbot has to tu acomploish when in enters corner state
 
-
-
-    
-
-
     def __init__(self, dt: float, logger=None, simulation: bool = False) -> None:
         """Wall following class initializer.
 
@@ -57,7 +52,7 @@ class WallFollower:
 
         if simulation:
             self.K_p = 2
-            self.K_d = 0.9
+            self.K_d = 1.3
         else:
             # too high!! try Kp 3 to 5
             self.K_p = 2  # 6 # 2
@@ -68,27 +63,25 @@ class WallFollower:
         self._dist_ref = 0.2
         self._vel_ref = 0.15
 
-
         # Distancias de seguridad y transición (m)
-        self.DIST_FRONT_LIMIT = 0.25    # Umbral de colisión inminente
-        self.DIST_FRONT_SAFE = 0.45     # Espacio necesario para dejar de pivotar
-        self.DIST_SIDE_REF = 0.20       # Distancia objetivo (tu DIST_REF)
-        self.DIST_WALL_LOST = 0.50      # Umbral para considerar que la pared ha terminado
-        self.DIST_WALL_CAPTURE = 0.35   # Distancia para "enganchar" una nueva pared
-        self.PARALLEL_MARGIN = 1.2     # Tolerancia de paralelismo (10%)
-        self.SIDE_HYSTERESIS = 0.15     # Evita oscilaciones entre paredes
-
-
+        self.DIST_FRONT_LIMIT = 0.25  # Umbral de colisión inminente
+        self.DIST_FRONT_SAFE = 0.6  # Espacio necesario para dejar de pivotar
+        self.DIST_SIDE_REF = 0.20  # Distancia objetivo (tu DIST_REF)
+        self.DIST_WALL_LOST = 0.50  # Umbral para considerar que la pared ha terminado
+        self.DIST_WALL_CAPTURE = 0.35  # Distancia para "enganchar" una nueva pared
+        self.DIST_SIDE_MAX = 0.35  # Límite para seguir una pared
+        self.PARALLEL_MARGIN = 1.2  # Tolerancia de paralelismo (10%)
+        self.SIDE_HYSTERESIS = 0.1  # Evita oscilaciones entre paredes
         # Parámetros de comportamiento (m/s y rad/s)
         self.V_SEARCH = 0.10
         self.W_SEARCH = 0.30
 
-        self.W_ALIGN  = 0.30  # Reducido de 0.5 para mayor estabilidad del sensor
-        self.W_INNER  = 0.50
-        self.V_OUTER  = 0.12
-        self.W_OUTER  = 0.50
+        self.W_ALIGN = 0.30  # Reducido de 0.5 para mayor estabilidad del sensor
+        self.W_INNER = 0.50
+        self.V_OUTER = 0.12
+        self.W_OUTER = 0.50
 
-        self.W_LIMIT_PID = 0.50
+        self.W_LIMIT_PID = 0.05  # 0.05
 
     def compute_commands(self, z_scan: list[float], z_v: float, z_w: float) -> tuple[float, float]:
         """Wall following exploration algorithm.
@@ -135,7 +128,7 @@ class WallFollower:
         )
 
         # state machine logic: definition of each state
-        v_cmd, w_cmd = self._compute_actions_based_on_state(distance_to_current_wall)
+        v_cmd, w_cmd = self._compute_actions_based_on_state(distance_to_current_wall, d_front)
         # contrains to respect the phisical limits of the robot
         v, w = self._saturate_commands(v_cmd, w_cmd)
 
@@ -280,13 +273,16 @@ class WallFollower:
             return d_right, d_left
         return d_left, d_right
 
-    def _update_state_machine(self, d_front, d_current, d_other, d_left, d_right, d_diag_l, d_diag_r, z_w) -> None:
+    def _update_state_machine(
+        self, d_front, d_current, d_other, d_left, d_right, d_diag_l, d_diag_r, z_w
+    ) -> None:
         """
-        Estructura jerarquica: 
+        Estructura jerarquica:
         1. Seguridad Critica
         2. Gestion de Transiciones segun Estado Actual
         """
 
+        # --- 0. DECIDE SIDE ---
         if self._state == State.DECIDE_SIDE:
             self._side_sign = -1 if d_left < d_right else 1
             self._state = State.FIND_WALL
@@ -296,22 +292,30 @@ class WallFollower:
             return
 
         # --- A. SEGURIDAD CRITICA (Pre-emptive) ---
-        if self._state not in [State.INNER_CORNER, State.ALIGN_WALL]:
+        if self._state not in [State.INNER_CORNER]:
             if d_front < self.DIST_FRONT_LIMIT:
                 # Decidimos lado de escape basado en el espacio disponible actual
                 self._side_sign = 1 if d_left > d_right else -1
                 self._state = State.INNER_CORNER
                 self._prev_error = 0.0
                 if self._logger:
-                    self._logger.info(f"SEGURIDAD: Obstaculo a {d_front:.2f}m. Pivotando hacia {'DERECHA' if self._side_sign==1 else 'IZQUIERDA'}")
+                    self._logger.info(
+                        f"SEGURIDAD: Obstaculo a {d_front:.2f}m. Pivotando hacia {'DERECHA' if self._side_sign == 1 else 'IZQUIERDA'}"
+                    )
                 return
 
         # --- B. TRANSICIONES DE ESTADO (Consolidadas) ---
-        
+
         # 1. MODO BUSQUEDA
         if self._state == State.FIND_WALL:
             if d_current < self.DIST_WALL_CAPTURE or d_front < self.DIST_WALL_CAPTURE:
                 self._state = State.ALIGN_WALL
+            # Si estamos buscando y la pared aparece por el lado contrario, la agarramos
+            elif d_other < self.DIST_WALL_CAPTURE:
+                self._side_sign *= -1
+                self._state = State.ALIGN_WALL
+                if self._logger:
+                    self._logger.info("BUSQUEDA: Pared encontrada en el lado opuesto. Cambiando.")
 
         # 2. MODO SEGUIMIENTO NOMINAL
         elif self._state == State.FOLLOW_WALL:
@@ -320,37 +324,55 @@ class WallFollower:
                 if d_other < self.DIST_WALL_CAPTURE:
                     self._side_sign *= -1
                     self._state = State.ALIGN_WALL
-                    if self._logger: self._logger.info("TOPOLOGIA: Cambiando a pared opuesta por perdida de actual")
+                    if self._logger:
+                        self._logger.info(
+                            "TOPOLOGIA: Cambiando a pared opuesta por perdida de actual"
+                        )
                 else:
                     self._state = State.OUTER_CORNER
-                    if self._logger: self._logger.info("TOPOLOGIA: Pared perdida sin alternativa. Rodeando esquina")
-            
+                    if self._logger:
+                        self._logger.info(
+                            "TOPOLOGIA: Pared perdida sin alternativa. Rodeando esquina"
+                        )
+
             # Caso: Existe una pared mucho mejor (Side Switching)
             elif d_other < (d_current - self.SIDE_HYSTERESIS) and d_other < self.DIST_SIDE_MAX:
                 self._side_sign *= -1
-                self._state = State.ALIGN_WALL
-                if self._logger: self._logger.info("OPTIMIZACION: Cambio de lado por proximidad")
+                self._state = State.FOLLOW_WALL
+                self._prev_error = 0.0
+                if self._logger:
+                    self._logger.info("OPTIMIZACION: Cambio de lado por proximidad")
 
         # 3. MODO ALINEACION (Trigonometria Lidar)
         elif self._state == State.ALIGN_WALL:
             d_diag = d_diag_r if self._side_sign == 1 else d_diag_l
-            is_parallel = d_diag > (d_current * self.PARALLEL_MARGIN)
-            
-            # Escape de ALIGN_WALL si el frente se bloquea inesperadamente
-            if d_front < self.DIST_FRONT_LIMIT:
-                self._state = State.INNER_CORNER
+            # is_parallel = d_diag > (d_current * self.PARALLEL_MARGIN)
+            is_parallel = (d_current * 1.1) < d_diag < (d_current * 1.6)
+
+            # Escape 1: ¡NUEVO! Abortar si la pared desaparece en mitad del giro
+            if d_current > self.DIST_WALL_LOST:
+                self._state = State.FIND_WALL
+                if self._logger:
+                    self._logger.info("ABORTAR ALINEACION: La pared desapareció durante el giro")
                 return
 
-            if d_front > self.DIST_FRONT_SAFE and d_current < (self.DIST_WALL_LOST + 0.05) and is_parallel:
+            # Salida con Éxito (Ya lo tenías)
+            if (
+                d_front > self.DIST_FRONT_SAFE
+                and d_current < (self.DIST_WALL_LOST + 0.05)
+                and is_parallel
+            ):
                 self._state = State.FOLLOW_WALL
                 self._prev_error = 0.0
-                if self._logger: self._logger.info(f"ESTADO: FOLLOW_WALL. Alineacion correcta")
+                if self._logger:
+                    self._logger.info("ESTADO: FOLLOW_WALL. Alineacion correcta")
 
         # 4. MODO ESQUINA INTERIOR
         elif self._state == State.INNER_CORNER:
             if d_front > self.DIST_FRONT_SAFE:
                 self._state = State.ALIGN_WALL
-                if self._logger: self._logger.info("ESTADO: ALIGN_WALL. Frente libre")
+                if self._logger:
+                    self._logger.info("ESTADO: ALIGN_WALL. Frente libre")
 
         # 5. MODO ESQUINA EXTERIOR
         elif self._state == State.OUTER_CORNER:
@@ -358,13 +380,16 @@ class WallFollower:
             if d_front < self.DIST_FRONT_LIMIT:
                 self._state = State.INNER_CORNER
                 return
-                
+
             if d_current < self.DIST_WALL_CAPTURE:
                 self._state = State.FOLLOW_WALL
-                if self._logger: self._logger.info("ESTADO: FOLLOW_WALL. Esquina envuelta")
+                if self._logger:
+                    self._logger.info("ESTADO: FOLLOW_WALL. Esquina envuelta")
 
     def _compute_actions_based_on_state(
-        self, distance_to_current_wall: float
+        self,
+        distance_to_current_wall: float,
+        d_front: float,  # <-- Añadir aquí
     ) -> tuple[float, float]:
         """
         Calcula las consignas de velocidad v y w basándose exclusivamente en el estado actual.
@@ -391,14 +416,12 @@ class WallFollower:
         # MODO: Seguimiento (Control PD sobre el error de distancia)
         elif self._state == State.FOLLOW_WALL:
             v = self.VEL_REF
-            error = self.DIST_REF - distance_to_current_wall
-            derivative = (error - self._prev_error) / self._dt
-            
-            # Cálculo del PID (PD en este caso)
-            # Nota: El signo se mantiene según tu configuración probada
-            pid_output = -self._side_sign * (self.K_p * error + self.K_d * derivative)
 
-            # Saturación profesional usando NumPy para limpieza
+            # PID normal (el código que ya tenías)
+            error = self.DIST_REF - distance_to_current_wall
+
+            derivative = (error - self._prev_error) / self._dt
+            pid_output = -self._side_sign * (self.K_p * error + self.K_d * derivative)
             w = np.clip(pid_output, -self.W_LIMIT_PID, self.W_LIMIT_PID)
             self._prev_error = error
 
@@ -413,7 +436,6 @@ class WallFollower:
             w = self.W_OUTER * self._side_sign
 
         return v, w
-
 
     def _saturate_commands(self, v: float, w: float) -> tuple[float, float]:
         """Applies kinematic constraints to keep velocity commands within robot limits.
