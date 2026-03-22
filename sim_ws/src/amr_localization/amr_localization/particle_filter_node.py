@@ -133,9 +133,8 @@ class ParticleFilterNode(LifecycleNode):
                 )
                 ts.registerCallback(self._compute_pose_callback)
 
-            
-            else: 
-                # separate subscribers with individual call backs                
+            else:
+                # separate subscribers with individual call backs
                 self._subscriber_odom = self.create_subscription(
                     Odometry,
                     "/odometry",
@@ -149,7 +148,7 @@ class ParticleFilterNode(LifecycleNode):
                 self._publisher_motion_control = self.create_publisher(
                     MotionControl, "/motion_control", qos_profile=10
                 )
-                # Timer 
+                # Timer
                 self._timer = self.create_timer(self._timer_period, self._timer_callback)
 
         except Exception:
@@ -170,7 +169,7 @@ class ParticleFilterNode(LifecycleNode):
         return super().on_activate(state)
 
     def _timer_callback(self):
-    
+
         if self._last_z_scan is None:
             return
         # a) STOP THE ROBOT: publish the motionControl message to indicate the robot that it needs to stop
@@ -179,15 +178,13 @@ class ParticleFilterNode(LifecycleNode):
         self._publisher_motion_control.publish(motion_msg)
 
         # b) MOVEMENT: execute as many motion steps as measurementes acumulated in odometry
-        num_measurements = len(self._odom_measurements)
-        if num_measurements > 0:
-            real_dt = self._timer_period / num_measurements # Asumiendo que el timer original es de 5s
-            self._particle_filter._dt = real_dt
+
+        if len(self._odom_measurements) > 0:
             for z_v, z_w in self._odom_measurements:
                 self._execute_motion_step(z_v, z_w)
 
         self._odom_measurements.clear()
-        
+
         # c) MEASUREMENT: execute one single correction phase
         x_h, y_h, theta_h = self._execute_measurement_step(self._last_z_scan)
 
@@ -250,7 +247,7 @@ class ParticleFilterNode(LifecycleNode):
             self._particle_filter.resample(z_scan)
             sense_time = time.perf_counter() - start_time
 
-            self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
+            # self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
 
             if self._enable_plot:
                 self._particle_filter.show("Sense", save_figure=True)
@@ -259,7 +256,7 @@ class ParticleFilterNode(LifecycleNode):
             self._localized, pose = self._particle_filter.compute_pose()
             clustering_time = time.perf_counter() - start_time
 
-            self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
+            # self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
 
         return pose
 
@@ -274,7 +271,7 @@ class ParticleFilterNode(LifecycleNode):
         self._particle_filter.move(z_v, z_w)
         move_time = time.perf_counter() - start_time
 
-        self.get_logger().info(f"Move step time: {move_time:7.3f} s")
+        # self.get_logger().info(f"Move step time: {move_time:7.3f} s")
 
         if self._enable_plot:
             self._particle_filter.show("Move", save_figure=True)

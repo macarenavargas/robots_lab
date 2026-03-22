@@ -98,6 +98,7 @@ class ParticleFilter:
 
         # create the Clustering object
         # eps: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
+        # try changing eps and min_samples
         db = DBSCAN(eps=0.2, min_samples=15).fit(features)
         # labels_: Cluster labels for each point in the dataset given to fit().
         # Noisy samples are given the label -1. Non-negative integers indicate cluster membership.
@@ -111,7 +112,6 @@ class ParticleFilter:
             unique_labels.remove(-1)
 
         n_clusters = len(unique_labels)
-        self._logger.info(f"Number of clusters: {n_clusters}")
 
         # if we only have one cluster left -> localized
         if n_clusters == 1:
@@ -134,8 +134,12 @@ class ParticleFilter:
 
                 pose = (x_hat, y_hat, th_hat)
 
-                # 50?
                 self._particle_count = 50
+
+                if self._logger:
+                    self._logger.info(
+                        f"LOCALIZED | x: {x_hat:.2f}m, y: {y_hat:.2f}m, th: {math.degrees(th_hat):.1f}º | Particles reduced to 50."
+                    )
             else:
                 # means that some particles have been grouped by chance, but in reality most of the particles are diseprsed
                 localized = False
@@ -154,12 +158,19 @@ class ParticleFilter:
             # tests to see optimal methods  :
             # self._particle_count = self._initial_particle_count
             # self._particle_count = max(200, self._particle_count //2 )
-            self._logger.info(f"Particles que hay ahora: {particles_needed}")
+            if self._logger:
+                self._logger.info(
+                    f"MULTIPLE HIPOTHESIS: There are {n_clusters} posible locations (clusters). Active particles: {self._particle_count}."
+                )
 
         else:
             # n_clusters == 0: the robot is lost
             localized = False
             self._particle_count = self._initial_particle_count
+            if self._logger:
+                self._logger.warning(
+                    "LOCALIZATION LOST: The particles have dispersed, restarting global localization."
+                )
 
         return localized, pose
 
@@ -191,10 +202,8 @@ class ParticleFilter:
         # calulate y position
         y_new = y_prev + v_gauss * np.sin(theta_prev) * self._dt
         # calulate theta and normalize so that the value is between [0,2pi]
-        if self._simulation:
-            theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)  # o +
-        else:
-            theta_new = (theta_prev + w_gauss * self._dt) % (2 * math.pi)  # o -?
+
+        theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
 
         # we update the pose and orentation of each particle
         for i in range(n_particles):
@@ -219,99 +228,65 @@ class ParticleFilter:
         """
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
 
-        measurements = self._extract_robust_measurements(measurements)
+        # STEP 1: extract the 8 lidar values and clean them.
+        z_real = self._extract_robust_measurements(measurements)
 
-        # calculate the weights for each particel (their probability)
-        weights = np.array(
-            [self._measurement_probability(measurements, p) for p in self._particles]
-        )
-        N = self._particle_count
-        W = np.sum(weights)
+        # STEP 2: calcualte the weights of each particle (how important they are)
+        weights = np.zeros(len(self._particles))
+        for i, particle in enumerate(self._particles):
+            weights[i] = self._measurement_probability(z_real, particle)
 
-        if W == 0:
-            weights = np.ones(self._particle_count) / N
+        # STEP 4: Normalize the weights.
+        weight_sum = np.sum(weights)
+        if weight_sum > 0:
+            weights /= weight_sum
         else:
-            weights = weights / W
+            # safety preacaution: If every particle has 0 probability -> asign uniform weights
+            weights = np.ones(len(self._particles)) / len(self._particles)
 
-        # create an array with the cumulative sum
-        weight_ruler = np.cumsum(weights)
+        # STEP 5: apply sistematic resampling
+        N = self._particle_count  # get current particle count ( updated by dbscan )
 
-        step = 1.0 / N
-        # take the first sample starting point
-        start = np.random.uniform(0, step)
+        # generate 1 random number between 0 and 1/N and create and array of pointers
+        positions = (np.random.random() + np.arange(N)) / N
 
-        # generate the N points we are going to select out of the array
-        selection_points = start + np.arange(N) * step
+        # create cumulative array of weights
+        cumulative_sum = np.cumsum(weights)
 
-        # with digitize we asociate the selection points with their corresponding index in the weight ruler array
-        new_idxs = np.digitize(selection_points, weight_ruler)
-        # no idnex beyond  N
-        new_idxs = np.clip(new_idxs, 0, N - 1)
-        # we filter the array bu the selected idxs and update the particle list.
-        self._particles = self._particles[new_idxs].copy()
+        # find the indexes where the pointers fall over the cumulative sum
+        indices = np.digitize(positions, cumulative_sum)
+
+        # STEP 6: update the aprticle array with the surviving particles.
+        self._particles = self._particles[indices]
 
     def _extract_robust_measurements(
         self, measurements: list[float], window_size: int = 3
     ) -> np.ndarray:
-        """Extracts and cleans LiDAR measurements depending on the environment.
+        """Extracts and cleans LiDAR measurements.
 
-        Applies a neighborhood search (window filter) for real-world noisy data,
-        and a simple cleanup for perfect simulation data.
+        Extrae exactamente 'self._num_rays' y sustituye los valores
+        inválidos (NaN, Inf) por el rango mínimo del sensor.
         """
-        num_total_measurements = len(measurements)
-        idxs_real = np.linspace(0, num_total_measurements - 1, self._num_rays, dtype=int)
+        n_real = len(measurements)
+        # STEP 1: safety precaution in case the lidar doesnt send anything
+        if n_real == 0:
+            return np.full(self._num_rays, self._sensor_range_min, dtype=float)
 
-        raw_measurements = np.array(measurements)
-        raw_measurements[np.isinf(raw_measurements)] = np.nan
+        # STEP 2: calculate the 8 lidar rays
+        idxs = np.linspace(0, n_real - 1, self._num_rays, dtype=int)
 
-        robust_measurements = []
+        # STEP 3: initializy empty array for extracted rays
+        extracted = np.empty(self._num_rays, dtype=float)
 
-        if self._simulation:
-            # --- MODO SIMULACIÓN ---
-            # El simulador es perfecto. Si devuelve un NaN (infinito), significa
-            # que el rayo no chocó con nada. Asignamos el rango máximo.
-            for idx in idxs_real:
-                val = raw_measurements[idx]
-                if np.isnan(val):
-                    robust_measurements.append(self._sensor_range_max)
-                else:
-                    robust_measurements.append(val)
+        # STEP 4: extract each ray and substitute for the minimum
+        for i, idx in enumerate(idxs):
+            val = measurements[idx]
+            if math.isnan(val) or math.isinf(val) or val <= 0.0:
+                extracted[i] = self._sensor_range_min
+            else:
+                extracted[i] = val
 
-        else:
-            # --- MODO ROBOT REAL ---
-            # Filtramos los valores basura (el láser LDS-01 falla por debajo de 0.16m)
-            raw_measurements[raw_measurements < self._sensor_range_min] = np.nan
-
-            for idx in idxs_real:
-                val = raw_measurements[idx]
-
-                # Si el rayo principal es válido, genial
-                if not np.isnan(val):
-                    robust_measurements.append(val)
-                else:
-                    # Búsqueda de vecindad (Window Search)
-                    found_valid = False
-                    for offset in range(1, window_size + 1):
-                        # Miramos a la derecha
-                        idx_r = (idx + offset) % num_total_measurements
-                        if not np.isnan(raw_measurements[idx_r]):
-                            robust_measurements.append(raw_measurements[idx_r])
-                            found_valid = True
-                            break
-
-                        # Miramos a la izquierda
-                        idx_l = (idx - offset) % num_total_measurements
-                        if not np.isnan(raw_measurements[idx_l]):
-                            robust_measurements.append(raw_measurements[idx_l])
-                            found_valid = True
-                            break
-
-                    # Si toda la vecindad es NaN, devolvemos NaN.
-                    # Esto indicará a la probabilidad que ignore este rayo.
-                    if not found_valid:
-                        robust_measurements.append(float("nan"))
-
-        return np.array(robust_measurements)
+        return extracted
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
@@ -452,7 +427,7 @@ class ParticleFilter:
 
         # TODO: 3.6. Complete the missing function body with your code.
 
-        # assuming that the lidar array has 360 values, we extract 8 that are equally spaced out
+        # assuming that the lidar array has 241 values, we extract 8 that are equally spaced out
         idxs = np.linspace(0, 239, self._num_rays, dtype=int)
 
         # extract the lidar rays in segment format
@@ -544,14 +519,11 @@ class ParticleFilter:
 
         # take the particles ray measurements
         particle_measurements = self._sense(particle)
-        # clean the nans of the particle's measurement, explain max
-        particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_max)
 
-        # claculate the likelihood of the particle with the robot
+        particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_min)
+
+        # calculate the likelihood of the particle with the robot
         for i in range(self._num_rays):
-            if not np.isnan(measurements[i]):
-                probability *= self._gaussian(
-                    particle_measurements[i], self._sigma_z, measurements[i]
-                )
+            probability *= self._gaussian(particle_measurements[i], self._sigma_z, measurements[i])
 
         return probability
