@@ -3,13 +3,14 @@ import numpy as np
 from enum import Enum, auto
 
 
+# PD AJUSTAR PD AJUSTAR PARAMETROS DE DB SCAN PROBAR UMBRALES SIMPLEE
+# AÑADIR LOGERS DESCRIPTIVOS
+# DEALING WITH MAX AND MIN IN PARTICLE FILTER
 class State(Enum):
-    DECIDE_SIDE = auto()
-    FIND_WALL = auto()
-    ALIGN_WALL = auto()
+    MOVE_AHEAD = auto()
     FOLLOW_WALL = auto()
-    INNER_CORNER = auto()
-    OUTER_CORNER = auto()
+    TURN_LEFT = auto()
+    TURN_RIGHT = auto()
 
 
 class WallFollower:
@@ -22,16 +23,6 @@ class WallFollower:
     TRACK = 0.16  # Distance between same axle wheels [m]
     WHEEL_RADIUS = 0.033  # Radius of the wheels [m]
     WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS  # Maximum motor angular speed [rad/s]
-
-    # Navigation Threshold
-    DIST_REF = 0.2  # Target distance to wall [m]
-    VEL_REF = 0.15  # Target linear velocity [m/s]
-    MAX_FRONT_DISTANCE = 0.25  # Front distance to trigger corner [m]
-    WALL_LOST_VAL = 1.2  # Distance to consider wall lost [m]
-    WALL_FOUND_VAL = 0.8  # Distance to consider new wall found [m]
-    TURN_ANGLE_TARGET = (
-        math.pi / 2
-    )  # Angle the rpbot has to tu acomploish when in enters corner state
 
     def __init__(self, dt: float, logger=None, simulation: bool = False) -> None:
         """Wall following class initializer.
@@ -46,13 +37,12 @@ class WallFollower:
         self._logger = logger
         self._simulation: bool = simulation
 
-        self._state = State.DECIDE_SIDE
+        self._state = State.MOVE_AHEAD
         self._side_sign = 1  # 1 = Right, -1 = Left
-        self._angle_turned = 0.0  # used to acumulate angle to know how much the robot has turned
 
         if simulation:
-            self.K_p = 2
-            self.K_d = 1.3
+            self.K_p = 2  # 1.7 2
+            self.K_d = 1  # 2.2
         else:
             # too high!! try Kp 3 to 5
             self.K_p = 2  # 6 # 2
@@ -62,31 +52,7 @@ class WallFollower:
 
         self._dist_ref = 0.2
         self._vel_ref = 0.15
-
-        # Distancias de seguridad y transición (m)
-        self.DIST_FRONT_LIMIT = 0.25  # Umbral de colisión inminente
-        self.DIST_FRONT_SAFE = 0.6  # Espacio necesario para dejar de pivotar
-        self.DIST_SIDE_REF = 0.20  # Distancia objetivo (tu DIST_REF)
-        self.DIST_WALL_LOST = 0.50  # Umbral para considerar que la pared ha terminado
-        self.DIST_WALL_CAPTURE = 0.35  # Distancia para "enganchar" una nueva pared
-        self.DIST_SIDE_MAX = 0.35  # Límite para seguir una pared
-        self.PARALLEL_MARGIN = 1.2  # Tolerancia de paralelismo (10%)
-        self.SIDE_HYSTERESIS = 0.1  # Evita oscilaciones entre paredes
-        # Parámetros de comportamiento (m/s y rad/s)
-        self.V_SEARCH = 0.10
-        self.W_SEARCH = 0.30
-
-        self.W_ALIGN = 0.30  # Reducido de 0.5 para mayor estabilidad del sensor
-        self.W_INNER = 0.50
-        self.V_OUTER = 0.12
-        self.W_OUTER = 0.50
-
-        self.W_LIMIT_PID = 0.05  # 0.05
-
-
-        self._lost_wall_counter = 0
-        self.LOST_WALL_THRESHOLD = 3  # Necesita 3 lecturas seguidas (150ms) para creerse que no hay pared  
-        self._align_counter = 0
+        self._d_current = None
 
     def compute_commands(self, z_scan: list[float], z_v: float, z_w: float) -> tuple[float, float]:
         """Wall following exploration algorithm.
@@ -104,42 +70,30 @@ class WallFollower:
         """
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
 
-        # clean de z_scan array to deal with nan and inf values
+        # STEP 1: clean de z_scan array to deal with nan and inf values
         clean_scan = self._clean_lidar_data(z_scan)
 
-        # extract from the scan array the set of values we need
+        # STEP 2: extract from the scan array the set of values we need
+        d_front, d_left, d_right = self._get_sensor_readings(clean_scan)
 
-        # d_front, d_left, d_right = self._get_sensor_readings(clean_scan)
-        d_front, d_left, d_right, d_front_left, d_front_right = self._get_sensor_readings(
-            clean_scan
-        )
+        # STEP 3: update the distance to wall we are currently following
+        if self._side_sign == 1:
+            self._d_current = d_right
+        else:
+            self._d_current = d_left
 
-        # Update control variables
-        distance_to_current_wall, distance_to_other_wall = self._get_wall_distances(d_left, d_right)
+        # STEP 3: update the state machine
+        self._update_state_machine(d_front, d_left, d_right)
 
-        # state machine logic: transitions
-        # self._update_state_machine(
-        # d_front, distance_to_current_wall, distance_to_other_wall, d_left, d_right, z_w
-        # )
-        self._update_state_machine(
-            d_front,
-            distance_to_current_wall,
-            distance_to_other_wall,
-            d_left,
-            d_right,
-            d_front_left,
-            d_front_right,
-            z_w,
-        )
+        # STEP 4: determine what action to take based ont he current state
+        v_cmd, w_cmd = self._compute_actions_based_on_state()
 
-        # state machine logic: definition of each state
-        v_cmd, w_cmd = self._compute_actions_based_on_state(distance_to_current_wall, d_front)
-        # contrains to respect the phisical limits of the robot
+        # STEP 5: apply contrains to respect the physical limits of the robot
         v, w = self._saturate_commands(v_cmd, w_cmd)
 
         if self._logger is not None:
             self._logger.info(
-                f"[{self._state.name}] Side:{'R' if self._side_sign == 1 else 'L'} | Front:{d_front:.2f} | Right:{d_right:.2f} |  Left: {d_left:.2f} | w:{w:.2f}"
+                f"[{self._state.name}] Side:{'R' if self._side_sign == 1 else 'L'} | Front:{d_front:.2f} | Right:{d_right:.3f} |  Left: {d_left:.3f} | w:{w:.2f}"
             )
 
         if not self._simulation:
@@ -157,32 +111,17 @@ class WallFollower:
             A clean list of distances.
         """
 
-        if self._simulation:
-            clean_scan = []
-            for r in z_scan:
-                if math.isnan(r) or math.isinf(r) or r == 0.0:
-                    # if we get any value that doesnt make sense we set it to the senor max
-                    clean_scan.append(self.SENSOR_RANGE_MAX)
-                else:
-                    clean_scan.append(r)
-            return clean_scan
-        else:
-            return list(z_scan)
+        safe_value = 0.9 * self.SENSOR_RANGE_MIN
+
+        clean_scan = [
+            r if not (math.isnan(r) or math.isinf(r) or r <= 0.0) else safe_value for r in z_scan
+        ]
+        return clean_scan
 
     def _get_robust_min(self, values: list[float]) -> float:
 
-        if self._simulation:
-            valid_values = values
-        else:
-            valid_values = [
-                v for v in values if not math.isnan(v) and not math.isinf(v) and v > 0.0
-            ]
-
-        if not valid_values:
-            return self.SENSOR_RANGE_MAX
-
-        k = min(len(valid_values), 5)
-        sorted_vals = sorted(valid_values)
+        k = min(len(values), 5)
+        sorted_vals = sorted(values)
         return sum(sorted_vals[:k]) / k
 
     def _get_sensor_readings(self, scan: list[float]) -> tuple[float, float, float]:
@@ -197,25 +136,25 @@ class WallFollower:
                 d_right: Distance to the closest obstacle on the right [m].
         """
 
+        SIM_TOTAL_RAYS = 240.0
+        SIM_DEGREES_PER_RAY = 360.0 / SIM_TOTAL_RAYS
+
+        sim_front_rays_half = 20  # +/- 20 rays from the front center of the robot
+        sim_side_rays_half = 10  # +/- 10 rays from the center of each side (90º y 270º)
+
         if self._simulation:
-            # El LiDAR tiene 241 valores. 1 índice = 1.5 grados.
+            # STEP 1: extract minimum distance from the front section
+            d_front = min(scan[-sim_front_rays_half:] + scan[:sim_front_rays_half])
 
-            # FRENTE (Índice 0 y 240) -> +/- 7.5 grados
-            d_front = min(scan[-5:] + scan[:5])
+            # STEP 2: extract minimum distance from the left section (center at 90º)
+            idx_left = int(SIM_TOTAL_RAYS / 4)  # index 60
+            d_left = min(scan[idx_left - sim_side_rays_half : idx_left + sim_side_rays_half + 1])
 
-            # LATERAL IZQUIERDO (90º) -> Índice 60 (+/- 15 grados)
-            d_left = min(scan[50:70])
+            # STEP 3: extract minimum distance from the right section (center at 270º)
+            idx_right = int(3 * SIM_TOTAL_RAYS / 4)  # index 180
+            d_right = min(scan[idx_right - sim_side_rays_half : idx_right + sim_side_rays_half + 1])
 
-            # LATERAL DERECHO (270º) -> Índice 180 (+/- 15 grados)
-            d_right = min(scan[170:190])
-
-            # DIAGONAL FRONT-IZQ (45º) -> Índice 30 (+/- 15 grados)
-            d_front_left = min(scan[20:40])
-
-            # DIAGONAL FRONT-DER (315º) -> Índice 210 (+/- 15 grados)
-            d_front_right = min(scan[200:220])
-
-            return d_front, d_left, d_right, d_front_left, d_front_right
+            return d_front, d_left, d_right
 
         else:
             n = len(scan)
@@ -224,284 +163,138 @@ class WallFollower:
                     self.SENSOR_RANGE_MAX,
                     self.SENSOR_RANGE_MAX,
                     self.SENSOR_RANGE_MAX,
-                    self.SENSOR_RANGE_MAX,
-                    self.SENSOR_RANGE_MAX,
                 )
 
-            #  +/- 20 degrees range for left and right
-            SIDE_APERTURE = 25
-            #  +/- 10 degree range for front
-            FRONT_APERTURE = 10
-            # +/- 15 degree for diagonals
-            DIAG_APERTURE = 15
+            # STEP 1: transform simualtion rays into aperture degrees
+            front_aperture_deg = sim_front_rays_half * SIM_DEGREES_PER_RAY
+            side_aperture_deg = sim_side_rays_half * SIM_DEGREES_PER_RAY
 
-            rays_per_degree = n / 360.0
+            # STEP 2. Calculate how many rays in the real robot are equivalent to those degrees
+            real_rays_per_degree = n / 360.0
+            real_front_width = int(front_aperture_deg * real_rays_per_degree)
+            real_side_width = int(side_aperture_deg * real_rays_per_degree)
 
-            side_width = int(SIDE_APERTURE * rays_per_degree)
-            front_width = int(FRONT_APERTURE * rays_per_degree)
-            diag_width = int(DIAG_APERTURE * rays_per_degree)
+            # STEP 3: extract minimum distance from each section
+            fw = max(1, real_front_width)
+            d_front = min(scan[-fw:] + scan[:fw])
 
-            fw = max(1, front_width)
-            d_front = self._get_robust_min(scan[-fw:] + scan[:fw])
+            idx_left = int(n / 4)
+            d_left = min(scan[idx_left - real_side_width : idx_left + real_side_width + 1])
 
-            idx_left = int(n / 4)  # 90 grados
-            d_left = self._get_robust_min(scan[idx_left - side_width : idx_left + side_width])
+            idx_right = int(3 * n / 4)
+            d_right = min(scan[idx_right - real_side_width : idx_right + real_side_width + 1])
 
-            idx_right = int(3 * n / 4)  # 270 grados
-            d_right = self._get_robust_min(scan[idx_right - side_width : idx_right + side_width])
+            return d_front, d_left, d_right
 
-            idx_front_left = int(n / 8)  # 45 grados
-            d_front_left = self._get_robust_min(
-                scan[idx_front_left - diag_width : idx_front_left + diag_width]
-            )
+    def _update_state_machine(self, d_front, d_left, d_right) -> None:
+        enter_turn_distance = 0.25
+        exit_turn_distance = 0.4
+        exit_move_ahead_distance = 0.25
+        enter_move_ahead_distance = 0.4
 
-            idx_front_right = int(7 * n / 8)  # 315 grados
-            d_front_right = self._get_robust_min(
-                scan[idx_front_right - diag_width : idx_front_right + diag_width]
-            )
-
-            return d_front, d_left, d_right, d_front_left, d_front_right
-
-    def _get_wall_distances(self, d_left: float, d_right: float) -> tuple[float, float]:
-        """Determines distances to the followed wall and the opposite wall.
-
-        Args:
-            d_left: Minimum distance to the left wall [m].
-            d_right: Minimum distance to the right wall [m].
-
-        Returns:
-            A tuple containing:
-                distance_to_current_wall: The distance to the wall currently being followed [m].
-                distance_to_other_wall: The distance to the wall on the opposite side [m].
-        """
-        if self._side_sign == 1:
-            return d_right, d_left
-        return d_left, d_right
-
-    def _update_state_machine(
-        self, d_front, d_current, d_other, d_left, d_right, d_diag_l, d_diag_r, z_w
-    ) -> None:
-        """
-        Estructura jerarquica:
-        1. Seguridad Critica
-        2. Gestion de Transiciones segun Estado Actual
-        """
-
-        # --- 0. DECIDE SIDE ---
-        if self._state == State.DECIDE_SIDE:
-            self._side_sign = -1 if d_left < d_right else 1
-            self._state = State.FIND_WALL
-            if self._logger:
-                side_str = "DERECHA" if self._side_sign == 1 else "IZQUIERDA"
-                self._logger.info(f"MODO INICIAL: Referencia pared {side_str}")
-            return
-
-        # --- A. SEGURIDAD CRITICA (Pre-emptive) ---
-        if self._state not in [State.INNER_CORNER]:
-            if d_front < self.DIST_FRONT_LIMIT:
-                # Decidimos lado de escape basado en el espacio disponible actual
-                self._side_sign = 1 if d_left > d_right else -1
-                self._state = State.INNER_CORNER
-                self._prev_error = 0.0
-                if self._logger:
-                    self._logger.info(
-                        f"SEGURIDAD: Obstaculo a {d_front:.2f}m. Pivotando hacia {'DERECHA' if self._side_sign == 1 else 'IZQUIERDA'}"
-                    )
-                return
-
-        # --- B. TRANSICIONES DE ESTADO (Consolidadas) ---
-
-        # 1. MODO BUSQUEDA
-        if self._state == State.FIND_WALL:
-            if d_current < self.DIST_WALL_CAPTURE or d_front < self.DIST_WALL_CAPTURE:
-                self._state = State.ALIGN_WALL
-            # Si estamos buscando y la pared aparece por el lado contrario, la agarramos
-            elif d_other < self.DIST_WALL_CAPTURE:
-                self._side_sign *= -1
-                self._state = State.ALIGN_WALL
-                if self._logger:
-                    self._logger.info("BUSQUEDA: Pared encontrada en el lado opuesto. Cambiando.")
-
-        # 2. MODO SEGUIMIENTO NOMINAL
-        elif self._state == State.FOLLOW_WALL:
-           
-            if self._simulation:
-                # Caso: Perdemos la pared que seguiamos
-                if d_current > self.DIST_WALL_LOST:
-                    if d_other < self.DIST_WALL_CAPTURE:
-                        self._side_sign *= -1
-                        self._state = State.ALIGN_WALL
-                        if self._logger:
-                            self._logger.info(
-                                "TOPOLOGIA: Cambiando a pared opuesta por perdida de actual"
-                            )
-                    else:
-                        self._state = State.OUTER_CORNER
-                        if self._logger:
-                            self._logger.info(
-                                "TOPOLOGIA: Pared perdida sin alternativa. Rodeando esquina"
-                            )
-
-                # Caso: Existe una pared mucho mejor (Side Switching)
-                elif d_other < (d_current - self.SIDE_HYSTERESIS) and d_other < self.DIST_SIDE_MAX:
-                    self._side_sign *= -1
-                    self._state = State.FOLLOW_WALL
-                    self._prev_error = 0.0
+        # STATE MOVE AHEAD:
+        # -> enter (from FOLLOW_WALL): don't have a wall thats close enigh to follow
+        # <- leave (TO FOLLOW_WALL): found a wall to follow
+        if self._state == State.MOVE_AHEAD:
+            # is there a wall close enough to follow?
+            if d_left < exit_move_ahead_distance or d_right < exit_move_ahead_distance:
+                # check which wall is closer
+                if d_left > d_right:
+                    self._side_sign = 1
                     if self._logger:
-                        self._logger.info("OPTIMIZACION: Cambio de lado por proximidad")
-            else:
-                # --- FILTRO DE RUIDO (DEBOUNCING) ---
-                if d_current > self.DIST_WALL_LOST:
-                    self._lost_wall_counter += 1
+                        self._logger.info("Wall found on the RIGHT. Switching to FOLLOW_WALL.")
                 else:
-                    self._lost_wall_counter = 0  # Si la pared vuelve, reseteamos la paciencia
-
-                # Caso: Perdemos la pared de verdad (confirmado por varios ciclos)
-                if self._lost_wall_counter >= self.LOST_WALL_THRESHOLD:
-                    
-                    if d_other < self.DIST_WALL_CAPTURE:
-                        self._side_sign *= -1
-                        self._state = State.ALIGN_WALL # O FOLLOW_WALL si ya aplicaste la corrección topológica
-                        self._lost_wall_counter = 0
-                        if self._logger:
-                            self._logger.info("TOPOLOGIA: Cambiando a pared opuesta por pérdida real")
-                    else:
-                        self._state = State.OUTER_CORNER
-                        self._lost_wall_counter = 0
-                        if self._logger:
-                            self._logger.info("TOPOLOGIA: Pared perdida confirmada. Esquina exterior.")
-
-                # Caso: Existe una pared mucho mejor (Side Switching)
-                elif d_other < (d_current - self.SIDE_HYSTERESIS) and d_other < self.DIST_SIDE_MAX:
-                    self._side_sign *= -1
-                    self._state = State.FOLLOW_WALL
-                    self._prev_error = 0.0
+                    self._side_sign = -1
                     if self._logger:
-                        self._logger.info("OPTIMIZACION: Cambio de lado por proximidad")
-
-        # 3. MODO ALINEACION (Trigonometria Lidar)
-        elif self._state == State.ALIGN_WALL:
-
-            if self._simulation:
-                d_diag = d_diag_r if self._side_sign == 1 else d_diag_l
-                # is_parallel = d_diag > (d_current * self.PARALLEL_MARGIN)
-                is_parallel = (d_current * 1.1) < d_diag < (d_current * 1.6)
-            else:
-                d_diag = d_diag_r if self._side_sign == 1 else d_diag_l
-            
-                # --- CÁLCULO DEL RATIO ROBUSTO ---
-             
-                ratio_actual = d_diag / d_current
-                
-                
-                # Condición estricta: El ideal trigonométrico es la raíz de 2 (1.41). 
-                # Apretamos la ventana matemática para evitar salidas prematuras.
-                # is_parallel_math = 1.30 < ratio_actual < 1.48
-                is_parallel = 1.35 < ratio_actual < 1.45
-                # --- is_parallel_math DE CONFIRMACIÓN ---
-                # if is_parallel_math:
-                #     self._align_counter += 1
-                # else:
-                #     self._align_counter = 0
-
-                # is_parallel = self._align_counter >= 2
-
-                # --- LOGGER DE DIAGNÓSTICO (RAYOS X) ---
-                if self._logger:
-                    self._logger.info(
-                        f"[ALIGN DEBUG] Side: {'R' if self._side_sign == 1 else 'L'} | "
-                        f"d_curr: {d_current:.2f}m | d_diag: {d_diag:.2f}m | "
-                        f"Ratio: {ratio_actual:.2f} | Parallel: {is_parallel}"
-                    )
-
-            # Escape 1: ¡NUEVO! Abortar si la pared desaparece en mitad del giro
-            if d_current > self.DIST_WALL_LOST:
-                self._state = State.FIND_WALL
-                self._align_counter = 0
-                if self._logger:
-                    self._logger.info("ABORTAR ALINEACION: La pared desapareció durante el giro")
-                return
-
-            # Salida con Éxito (Ya lo tenías)
-            if (
-                d_front > self.DIST_FRONT_SAFE
-                and d_current < (self.DIST_WALL_LOST + 0.05)
-                and is_parallel
-            ):
+                        self._logger.info("Wall found on the LEFT. Switching to FOLLOW_WALL.")
                 self._state = State.FOLLOW_WALL
                 self._prev_error = 0.0
-                self._align_counter = 0
-                if self._logger:
-                    self._logger.info("ESTADO: FOLLOW_WALL. Alineacion correcta")
 
-        # 4. MODO ESQUINA INTERIOR
-        elif self._state == State.INNER_CORNER:
-            if d_front > self.DIST_FRONT_SAFE:
-                self._state = State.ALIGN_WALL
-                if self._logger:
-                    self._logger.info("ESTADO: ALIGN_WALL. Frente libre")
+        # STATE FOLLOW_WALL:
+        # -> enter (from MOVE_AHEAD): there is a wall close enough to follow
+        # <- leave (to TURN_LEFT or TURN_RIGHT): frontal obstacle detected
+        # <- leave (to MOVE_AHEAD): current wall the robot was following is lost
+        elif self._state == State.FOLLOW_WALL:
+            # is there an obstacle close enough?
+            if d_front < enter_turn_distance:
+                # decide which side to turn to
+                if d_left > d_right:
+                    self._side_sign = 1
+                    self._state = State.TURN_LEFT
+                else:
+                    self._side_sign = -1
+                    self._state = State.TURN_RIGHT
 
-        # 5. MODO ESQUINA EXTERIOR
-        elif self._state == State.OUTER_CORNER:
-            # Si el frente se bloquea mientras rodeamos, prioridad a la seguridad
-            if d_front < self.DIST_FRONT_LIMIT:
-                self._state = State.INNER_CORNER
-                return
-
-            if d_current < self.DIST_WALL_CAPTURE:
-                self._state = State.FOLLOW_WALL
                 if self._logger:
-                    self._logger.info("ESTADO: FOLLOW_WALL. Esquina envuelta")
+                    self._logger.info(
+                        f"Frontal obstacle detected at {d_front:.2f}m. Executing CORNER maneuver."
+                    )
+            # have we lost the current wlal we where following?
+            elif (self._side_sign == 1 and d_right > enter_move_ahead_distance) or (
+                self._side_sign == -1 and d_left > enter_move_ahead_distance
+            ):
+                if self._logger:
+                    self._logger.info("WALL LOST. Switching to MOVE_AHEAD.")
+                self._state = State.MOVE_AHEAD
+
+        # STATE TURN_RIGHT or TURN_LEFT:
+        # -> enter (from FOLLOW_WALL): frontal obstacle detected
+        # <- leave (to MOVE_AHEAD): frontal obstacled cleared.
+        elif self._state == State.TURN_RIGHT:
+            # Is the robot's front clear?
+            if d_front > exit_turn_distance:
+                self._state = State.MOVE_AHEAD
+                if self._logger:
+                    self._logger.info(
+                        f"Front cleared ({d_front:.2f}m). Maneuver complete. Switching to MOVE_AHEAD."
+                    )
+        elif self._state == State.TURN_LEFT:
+            # Is the robot's front clear?
+            if d_front > exit_turn_distance:
+                self._state = State.MOVE_AHEAD
+                if self._logger:
+                    self._logger.info(
+                        f"Front cleared ({d_front:.2f}m). Maneuver complete. Switching to MOVE_AHEAD."
+                    )
 
     def _compute_actions_based_on_state(
         self,
-        distance_to_current_wall: float,
-        d_front: float,  # <-- Añadir aquí
     ) -> tuple[float, float]:
-        """
-        Calcula las consignas de velocidad v y w basándose exclusivamente en el estado actual.
-        Implementa leyes de control diferenciadas para navegación, alineación y emergencia.
-        """
+
         v = 0.0
         w = 0.0
 
-        # MODO: Reposo
-        if self._state == State.DECIDE_SIDE:
-            return 0.0, 0.0
+        turn_angular_velocity = 0.4
 
-        # MODO: Búsqueda (Arco amplio para cubrir área)
-        elif self._state == State.FIND_WALL:
-            v = self.V_SEARCH
-            w = self.W_SEARCH * self._side_sign
+        # STATE MOVE_AHEAD: move in a straight line
+        if self._state == State.MOVE_AHEAD:
+            v = self._vel_ref
+            w = 0.0
 
-        # MODO: Alineación (Rotación pura para precisión del LiDAR)
-        elif self._state == State.ALIGN_WALL:
-            v = 0.0
-            # Reducimos velocidad angular para que el LiDAR no sufra de motion blur
-            w = -self.W_ALIGN * self._side_sign
-
-        # MODO: Seguimiento (Control PD sobre el error de distancia)
+        # STATE FOLLOW_WALL: apply PD control to follow the wall
         elif self._state == State.FOLLOW_WALL:
-            v = self.VEL_REF
+            v = self._vel_ref
 
-            # PID normal (el código que ya tenías)
-            error = self.DIST_REF - distance_to_current_wall
+            error = self._dist_ref - self._d_current
+
+            if self._prev_error == 0.0:
+                self._prev_error = error
 
             derivative = (error - self._prev_error) / self._dt
+
             pid_output = -self._side_sign * (self.K_p * error + self.K_d * derivative)
-            w = np.clip(pid_output, -self.W_LIMIT_PID, self.W_LIMIT_PID)
+            # w = np.clip(pid_output, -0.5, 0.5)
+            w = pid_output
             self._prev_error = error
 
-        # MODO: Esquina Interior (Evitación de colisión frontal)
-        elif self._state == State.INNER_CORNER:
+        # STATE TURN LEFT, TURN_RIGHT: stop and turn on the spot.
+        elif self._state == State.TURN_LEFT:
             v = 0.0
-            w = -self.W_INNER * self._side_sign
+            w = -turn_angular_velocity
 
-        # MODO: Esquina Exterior (Maniobra de envolvimiento)
-        elif self._state == State.OUTER_CORNER:
-            v = self.V_OUTER
-            w = self.W_OUTER * self._side_sign
-
+        elif self._state == State.TURN_RIGHT:
+            v = 0.0
+            w = turn_angular_velocity
         return v, w
 
     def _saturate_commands(self, v: float, w: float) -> tuple[float, float]:
@@ -522,7 +315,7 @@ class WallFollower:
         w_limit = (self.WHEEL_SPEED_MAX * r - abs(v)) / b
 
         if abs(w) > w_limit:
-            # prioritize angular velo   city, reduce linear velocity
+            # prioritize angular velocity, reduce linear velocity
             v_altered = (self.WHEEL_SPEED_MAX * r) - (abs(w) * b)
 
             if v_altered < 0:
