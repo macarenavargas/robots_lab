@@ -99,7 +99,7 @@ class ParticleFilter:
         # create the Clustering object
         # eps: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
         # try changing eps and min_samples
-        db = DBSCAN(eps=0.2, min_samples=15).fit(features)
+        db = DBSCAN(eps=0.2, min_samples=10).fit(features)
         # labels_: Cluster labels for each point in the dataset given to fit().
         # Noisy samples are given the label -1. Non-negative integers indicate cluster membership.
         labels = db.labels_
@@ -192,6 +192,8 @@ class ParticleFilter:
         v_gauss = v + np.random.normal(0, self._sigma_v, n_particles)
         w_gauss = w + np.random.normal(0, self._sigma_w, n_particles)
 
+        self._logger.info(f"move the particle {v,w}")
+
         # extract value arrays
         x_prev = self._particles[:, 0]
         y_prev = self._particles[:, 1]
@@ -202,8 +204,10 @@ class ParticleFilter:
         # calulate y position
         y_new = y_prev + v_gauss * np.sin(theta_prev) * self._dt
         # calulate theta and normalize so that the value is between [0,2pi]
-
-        theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
+        if self._simulation:
+            theta_new = (theta_prev - w_gauss * self._dt) % (2 * math.pi)
+        else:
+            theta_new = (theta_prev + w_gauss * self._dt) % (2 * math.pi)
 
         # we update the pose and orentation of each particle
         for i in range(n_particles):

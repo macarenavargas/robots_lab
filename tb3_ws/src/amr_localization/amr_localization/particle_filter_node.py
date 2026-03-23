@@ -77,7 +77,7 @@ class ParticleFilterNode(LifecycleNode):
             self._last_z_scan = None
             self._odom_measurements = []
 
-            self._timer_period = 5
+            self._timer_period = 4
 
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
@@ -178,7 +178,7 @@ class ParticleFilterNode(LifecycleNode):
         self._publisher_motion_control.publish(motion_msg)
 
         # b) MOVEMENT: execute as many motion steps as measurementes acumulated in odometry
-
+        self._logger.info(f"ODOEMTRY UPDATES: {self._odom_measurements}")
         if len(self._odom_measurements) > 0:
             for z_v, z_w in self._odom_measurements:
                 self._execute_motion_step(z_v, z_w)
