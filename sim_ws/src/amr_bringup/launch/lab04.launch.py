@@ -23,7 +23,7 @@ def generate_launch_description():
         name="particle_filter",
         namespace="",
         output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
+        arguments=["--ros-args", "--log-level", "WARN"], #"WARN"
         parameters=[
             {
                 "enable_plot": False,
@@ -71,10 +71,10 @@ def generate_launch_description():
         name="pure_pursuit",
         namespace="",
         output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
+        arguments=["--ros-args", "--log-level", "INFO"],
         parameters=[
             {
-                "lookahead_distance": 0.4, #0.3
+                "lookahead_distance": 0.2, #0.2
                 "simulation": simulation,
             }
         ],
