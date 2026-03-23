@@ -74,7 +74,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "INFO"],
         parameters=[
             {
-                "lookahead_distance": 0.2, #0.3
+                "lookahead_distance": 0.2, #0.2
                 "simulation": simulation,
             }
         ],

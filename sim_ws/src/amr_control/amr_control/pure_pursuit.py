@@ -68,7 +68,9 @@ class PurePursuit:
         alpha = (alpha + np.pi) % (2 * np.pi) - np.pi
         #alpha = alpha % (2 * np.pi)
 
-
+        if self._logger:
+            self._logger.info(f"PURE PERSUIT:lookeahead distance = {self._lookahead_distance:.2f}, target point = {target_xy}, alpha = {alpha:.2f} rad")
+             
         
         # check if alpha is too high
         if abs(alpha) > self._alpha_threshold:
@@ -162,10 +164,12 @@ class PurePursuit:
 
             distance = np.linalg.norm(np.array(self.path[i]) - np.array(origin_xy))
             if distance >= self._lookahead_distance: 
+                # strategy : we choose the first point that passes the distance 
                 target_xy = self.path[i]
                 return target_xy
 
         
+        # if the target has not changed, then we assume we reached the goal 
         if target_xy == (0.0, 0.0): 
             target_xy = self.path[-1] # return goal 
             return target_xy
