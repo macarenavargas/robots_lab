@@ -205,10 +205,17 @@ class ParticleFilterNode(LifecycleNode):
     def _odometry_callback(self, odom_msg: Odometry):
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z
+        if self._simulation:
+            noise_threshold = 1e-3
+            if abs(z_v) > noise_threshold or abs(z_w) > noise_threshold:
+                self._odom_measurements.append((z_v, z_w))
+        else: 
+            # probar estos valores
+            noise_threshold_v = 0.01
+            noise_threshold_w = 0.1
 
-        noise_threshold = 1e-3
-        if abs(z_v) > noise_threshold or abs(z_w) > noise_threshold:
-            self._odom_measurements.append((z_v, z_w))
+            if abs(z_v) > noise_threshold_v or abs(z_w) > noise_threshold_w:
+                self._odom_measurements.append((z_v, z_w))
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
         """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
