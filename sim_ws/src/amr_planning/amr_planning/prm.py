@@ -538,10 +538,10 @@ if __name__ == "__main__":
     # Create the roadmap
     start_time = time.perf_counter()
     # node_count = 250 when use_grid = True 
-    prm = PRM(map_path, use_grid=True, node_count=250, grid_size   =0.1, connection_distance=0.15)
+    #prm = PRM(map_path, use_grid=True, node_count=250, grid_size   =0.1, connection_distance=0.15)
     #prm = PRM(map_path, use_grid=False, node_count=300, grid_size   =0.1, connection_distance=0.3)
     
-    #prm = PRM(map_path, use_grid=False, node_count= 300, grid_size   =0.1, connection_distance=0.3)
+    prm = PRM(map_path, use_grid=True, node_count= 300, grid_size   =0.1, connection_distance=0.15)
     
     roadmap_creation_time = time.perf_counter() - start_time
 

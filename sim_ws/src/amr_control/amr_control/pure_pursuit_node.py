@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 
 from amr_msgs.msg import PoseStamped
 from geometry_msgs.msg import TwistStamped
@@ -44,7 +45,7 @@ class PurePursuitNode(LifecycleNode):
                 dt,
                 lookahead_distance,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
 
             # Publishers
@@ -52,10 +53,16 @@ class PurePursuitNode(LifecycleNode):
 
             # Subscribers
             self._subscriber_pose = self.create_subscription(
-                PoseStamped, "pose", self._compute_commands_callback, 10
-            )
+                PoseStamped, "pose", self._compute_commands_callback, 10)
 
-            self._subscriber_path = self.create_subscription(Path, "path", self._path_callback, 10)
+            #self._subscriber_path = self.create_subscription(Path, "path", self._path_callback, 10)
+            
+            #qos = QoSProfile(depth=10)
+            #qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
+
+            self._subscriber_path = self.create_subscription(
+                Path, "path", self._path_callback, 10
+            )
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -83,11 +90,13 @@ class PurePursuitNode(LifecycleNode):
             pose_msg: Message containing the estimated robot pose.
 
         """
+        #self.get_logger().info(f"[POSE CALLBACK] localized={pose_msg.localized}")
         if pose_msg.localized:
             # Parse pose
             x = pose_msg.pose.position.x
             y = pose_msg.pose.position.y
             quat_w = pose_msg.pose.orientation.w
+
             quat_x = pose_msg.pose.orientation.x
             quat_y = pose_msg.pose.orientation.y
             quat_z = pose_msg.pose.orientation.z
@@ -96,8 +105,12 @@ class PurePursuitNode(LifecycleNode):
 
             # Execute pure pursuit
             v, w = self._pure_pursuit.compute_commands(x, y, theta)
-            self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
-
+           
+            #self.get_logger().info(f"localized: {pose_msg.localized}")
+            #self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
+            #self.get_logger().info(
+                #f"POSE: x={x:.2f}, y={y:.2f}, theta={theta:.2f}"
+            #)
             # Publish
             self._publish_velocity_commands(v, w)
 
@@ -109,8 +122,9 @@ class PurePursuitNode(LifecycleNode):
 
         """
         # TODO: 4.8. Complete the function body with your code (i.e., replace the pass statement).
+        
+        # iterate the path_msg and get the (x,y) of all the points
         path = []
-
         for pose in path_msg.poses: 
 
             x = pose.pose.position.x
@@ -118,8 +132,16 @@ class PurePursuitNode(LifecycleNode):
 
             path.append((x, y))
         
+        # keep the path in the class 
         self._pure_pursuit.path = path
-        return 
+        self._pure_pursuit._last_closest_idx = 0
+        
+        self.get_logger().info(
+            f"Path received with {len(path)} points | "
+            f"start={path[0]} | end={path[-1]}"
+            f"First 3 points: {path[:3]}"
+        )
+         
 
 
 
@@ -132,6 +154,7 @@ class PurePursuitNode(LifecycleNode):
             w: Angular velocity command [rad/s].
 
         """
+
         msg = TwistStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.twist.linear.x = v
