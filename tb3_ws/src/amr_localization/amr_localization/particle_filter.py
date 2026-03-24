@@ -20,7 +20,7 @@ class ParticleFilter:
         particle_count: int,
         sigma_v: float = 0.05,  # initial value : 0.05
         sigma_w: float = 0.1,  # initial value : 0.1
-        sigma_z: float = 0.2,  # initial value : 0.2
+        sigma_z: float = 0.25,  # initial value : 0.2
         sensor_range_max: float = 8.0,
         sensor_range_min: float = 0.16,
         global_localization: bool = True,
@@ -99,7 +99,7 @@ class ParticleFilter:
         # create the Clustering object
         # eps: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
         # try changing eps and min_samples
-        db = DBSCAN(eps=0.2, min_samples=10).fit(features)
+        db = DBSCAN(eps=0.2, min_samples=13).fit(features) # 15
         # labels_: Cluster labels for each point in the dataset given to fit().
         # Noisy samples are given the label -1. Non-negative integers indicate cluster membership.
         labels = db.labels_
