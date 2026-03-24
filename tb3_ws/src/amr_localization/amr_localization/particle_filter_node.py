@@ -211,7 +211,7 @@ class ParticleFilterNode(LifecycleNode):
                 self._odom_measurements.append((z_v, z_w))
         else: 
             # probar estos valores
-            noise_threshold_v = 0.01
+            noise_threshold_v = 0.01 # 0.1
             noise_threshold_w = 0.1
 
             if abs(z_v) > noise_threshold_v or abs(z_w) > noise_threshold_w:

@@ -9,7 +9,7 @@ from amr_localization.maps import Map
 from matplotlib import pyplot as plt
 from sklearn.cluster import DBSCAN
 
-
+# peso de cada prtiucla + localiacion de la particula y el robot.
 class ParticleFilter:
     """Particle filter implementation."""
 
@@ -58,7 +58,7 @@ class ParticleFilter:
         self._sigma_z: float = sigma_z
         self._simulation: bool = simulation
         self._iteration: int = 0
-        self._num_rays = 8
+        self._num_rays = 16 #8
 
         self._map = Map(
             map_path,
@@ -146,18 +146,17 @@ class ParticleFilter:
 
         # elif n_clusters > 1:
         elif n_clusters > 1:
-            # if we have multiple clusters
-            localized = False
-            # asign 100 particles for each cluster that exists
-            particles_needed = n_clusters * 200  # 100
+            # # if we have multiple clusters
+            # localized = False
+            # # asign 100 particles for each cluster that exists
+            # particles_needed = n_clusters * 200  # 100
 
-            # we put an upper bound limit so that we dont create more particles than self._initial_particle_count
-            # we put an lower bound so that we habe at leas 200 particles during the whole process
-            self._particle_count = min(self._initial_particle_count, max(200, particles_needed))
+            # # we put an upper bound limit so that we dont create more particles than self._initial_particle_count
+            # # we put an lower bound so that we habe at leas 200 particles during the whole process
+            # self._particle_count = min(self._initial_particle_count, max(200, particles_needed))
 
-            # tests to see optimal methods  :
-            # self._particle_count = self._initial_particle_count
-            # self._particle_count = max(200, self._particle_count //2 )
+            # # tests to see optimal methods  :
+     
             if self._logger:
                 self._logger.info(
                     f"MULTIPLE HIPOTHESIS: There are {n_clusters} posible locations (clusters). Active particles: {self._particle_count}."
@@ -192,7 +191,7 @@ class ParticleFilter:
         v_gauss = v + np.random.normal(0, self._sigma_v, n_particles)
         w_gauss = w + np.random.normal(0, self._sigma_w, n_particles)
 
-        self._logger.info(f"move the particle {v,w}")
+        # self._logger.info(f"move the particle {v,w}")
 
         # extract value arrays
         x_prev = self._particles[:, 0]
@@ -239,6 +238,7 @@ class ParticleFilter:
         weights = np.zeros(len(self._particles))
         for i, particle in enumerate(self._particles):
             weights[i] = self._measurement_probability(z_real, particle)
+            self._logger.info(f"PARTICLE {i}: {particle} -> PROBABILITY {weights[i]} | ROBOT {(0.0, -0.8, math.radians(90))}")
 
         # STEP 4: Normalize the weights.
         weight_sum = np.sum(weights)
@@ -388,13 +388,17 @@ class ParticleFilter:
         Returns: A NumPy array of tuples (x, y, theta) [m, m, rad].
 
         """
+
+   
         particles = np.empty((particle_count, 3), dtype=float)
+        # particles[0]=(0, -0.8, math.radians(90))
         valid_orientations = [0, math.pi / 2, math.pi, math.pi * 3 / 2]
         x_min, y_min, x_max, y_max = self._map.bounds()
 
         # TODO: 3.4. Complete the missing function body with your code.
 
         num_particled_created = 0
+        # num_particled_created=1
 
         while num_particled_created < particle_count:
             if global_localization:
@@ -414,7 +418,7 @@ class ParticleFilter:
                 particles[num_particled_created, 1] = y
                 particles[num_particled_created, 2] = theta
                 num_particled_created += 1
-
+        
         return particles
 
     def _sense(self, pose: tuple[float, float, float]) -> list[float]:
@@ -529,5 +533,7 @@ class ParticleFilter:
         # calculate the likelihood of the particle with the robot
         for i in range(self._num_rays):
             probability *= self._gaussian(particle_measurements[i], self._sigma_z, measurements[i])
+
+
 
         return probability
