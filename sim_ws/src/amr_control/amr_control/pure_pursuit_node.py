@@ -67,8 +67,6 @@ class PurePursuitNode(LifecycleNode):
                 PoseStamped, "pose", self._compute_commands_callback, 10)
 
             
-
-
             #self._subscriber_path = self.create_subscription(Path, "path", self._path_callback, 10)
             
             #qos = QoSProfile(depth=10)

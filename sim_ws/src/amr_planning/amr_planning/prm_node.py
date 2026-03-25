@@ -204,11 +204,7 @@ class PRMNode(LifecycleNode):
         
 
         self._publisher_path.publish(msg)
-        self.get_logger().info(
-            f"Published /path with {len(path)} points | "
-            f"first=({path[0][0]:.2f}, {path[0][1]:.2f}) | "
-            f"last=({path[-1][0]:.2f}, {path[-1][1]:.2f})"
-        )
+        
 
 def main(args=None):
     rclpy.init(args=args)
