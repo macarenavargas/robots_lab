@@ -20,7 +20,7 @@ class ParticleFilter:
         particle_count: int,
         sigma_v: float = 0.05,  # initial value : 0.05
         sigma_w: float = 0.1,  # initial value : 0.1
-        sigma_z: float = 0.25,  # initial value : 0.2
+        sigma_z: float = 0.2,  # initial value : 0.2
         sensor_range_max: float = 8.0,
         sensor_range_min: float = 0.16,
         global_localization: bool = True,
@@ -47,10 +47,11 @@ class ParticleFilter:
             simulation: True if running in simulation, False if running on the real robot.
 
         """
+        particle_count = 500
         self._dt: float = dt
         self._initial_particle_count: int = particle_count
         self._logger = logger
-        self._particle_count: int = particle_count
+        self._particle_count: int = particle_count # particle_count
         self._sensor_range_max: float = sensor_range_max
         self._sensor_range_min: float = sensor_range_min
         self._sigma_v: float = sigma_v
@@ -58,7 +59,7 @@ class ParticleFilter:
         self._sigma_z: float = sigma_z
         self._simulation: bool = simulation
         self._iteration: int = 0
-        self._num_rays = 16 #8
+        self._num_rays = 8 #8
 
         self._map = Map(
             map_path,
@@ -99,7 +100,7 @@ class ParticleFilter:
         # create the Clustering object
         # eps: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
         # try changing eps and min_samples
-        db = DBSCAN(eps=0.2, min_samples=13).fit(features) # 15
+        db = DBSCAN(eps=0.1,min_samples=15).fit(features) # 15
         # labels_: Cluster labels for each point in the dataset given to fit().
         # Noisy samples are given the label -1. Non-negative integers indicate cluster membership.
         labels = db.labels_
@@ -147,13 +148,13 @@ class ParticleFilter:
         # elif n_clusters > 1:
         elif n_clusters > 1:
             # # if we have multiple clusters
-            # localized = False
+            localized = False
             # # asign 100 particles for each cluster that exists
-            # particles_needed = n_clusters * 200  # 100
+            particles_needed = n_clusters * 100  # 100
 
             # # we put an upper bound limit so that we dont create more particles than self._initial_particle_count
             # # we put an lower bound so that we habe at leas 200 particles during the whole process
-            # self._particle_count = min(self._initial_particle_count, max(200, particles_needed))
+            self._particle_count = min(self._initial_particle_count, max(200, particles_needed))
 
             # # tests to see optimal methods  :
      
@@ -238,7 +239,8 @@ class ParticleFilter:
         weights = np.zeros(len(self._particles))
         for i, particle in enumerate(self._particles):
             weights[i] = self._measurement_probability(z_real, particle)
-            self._logger.info(f"PARTICLE {i}: {particle} -> PROBABILITY {weights[i]} | ROBOT {(0.0, -0.8, math.radians(90))}")
+            if weights[i] > 0.2:
+                self._logger.info(f"PARTICLE {i}: {particle} -> PROBABILITY {weights[i]} | ROBOT {(0.0, -0.8, math.radians(90))}")
 
         # STEP 4: Normalize the weights.
         weight_sum = np.sum(weights)
