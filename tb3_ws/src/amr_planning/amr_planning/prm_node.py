@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 
 from amr_msgs.msg import PoseStamped as AmrPoseStamped
 from geometry_msgs.msg import PoseStamped
@@ -30,6 +31,7 @@ class PRMNode(LifecycleNode):
         self.declare_parameter("smoothing_smooth_weight", 0.3)
         self.declare_parameter("use_grid", False)
         self.declare_parameter("world", "project")
+
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -92,12 +94,30 @@ class PRMNode(LifecycleNode):
 
             # Publishers
             # TODO: 4.6. Create the /path publisher (Path message).
-            
+            #self._publisher_path = self.create_publisher(msg_type= Path, topic="/path", qos_profile=10)
+            #qos = QoSProfile(depth=10)
+            #qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
+
+            self._publisher_path = self.create_publisher(
+                msg_type=Path,
+                topic="/path",
+                #qos_profile=qos,
+                qos_profile=10,
+            )
+                        
             # Subscribers
             self._subscriber_pose = self.create_subscription(
                 AmrPoseStamped, "pose", self._path_callback, 10
             )
 
+
+            self.get_logger().info(
+                f"PRM params | goal={self._goal} | "
+                f"node_count={node_count} | grid_size={grid_size:.3f} | "
+                f"conn_dist={connection_distance:.3f} | "
+                f"obs_safe={obstacle_safety_distance:.3f} | "
+                f"use_grid={use_grid} | world={world}"
+            )
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR
@@ -122,16 +142,20 @@ class PRMNode(LifecycleNode):
             pose_msg: Message containing the robot pose estimate.
 
         """
-        if pose_msg.localized and not self._localized:
-            start = (pose_msg.pose.position.x, pose_msg.pose.position.y)
 
+        if pose_msg.localized and not self._localized:
+            
+            # localize the robot for the first tiem  
+            start = (pose_msg.pose.position.x, pose_msg.pose.position.y)
+            self.get_logger().info("Robot localized for the first time. Computing path.")
             start_time = time.perf_counter()
+            # find the path from the start to the goal using A* algorithm.
             path = self._planning.find_path(start, self._goal)
             pathfinding_time = time.perf_counter() - start_time
 
             self.get_logger().info(f"Pathfinding time: {pathfinding_time:1.3f} s")
 
-            start_time = time.perf_counter()
+            # smooth the path 
             smoothed_path = PRM.smooth_path(
                 path,
                 data_weight=self._smoothing_data_weight,
@@ -142,11 +166,12 @@ class PRMNode(LifecycleNode):
 
             self.get_logger().info(f"Smoothing time: {smoothing_time:1.3f} s")
 
+            # see the plot 
             if self._enable_plot:
                 self._planning.show(path=path, smoothed_path=smoothed_path, save_figure=True)
 
             self._publish_path(smoothed_path)
-
+        
         self._localized = pose_msg.localized
 
     def _publish_path(self, path: list[tuple[float, float]]) -> None:
@@ -157,7 +182,28 @@ class PRMNode(LifecycleNode):
 
         """
         # TODO: 4.7. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+
+        msg = Path()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "map"
+        
+        for x,y in path: 
+            # for each point in the path list, we make a PoseStamp message 
+            # and add it to the "poses" field. 
+            pose_msg = PoseStamped()
+            pose_msg.header.stamp = self.get_clock().now().to_msg()
+            pose_msg.header.frame_id = "map"
+
+            pose_msg.pose.position.x = x
+            pose_msg.pose.position.y = y
+            pose_msg.pose.position.z = 0.0
+
+            pose_msg.pose.orientation.w = 1.0
+
+            msg.poses.append(pose_msg)
+        
+
+        self._publisher_path.publish(msg)
         
 
 def main(args=None):

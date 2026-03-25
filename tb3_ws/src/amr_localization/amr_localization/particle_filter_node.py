@@ -73,6 +73,9 @@ class ParticleFilterNode(LifecycleNode):
             # Attribute and object initializations
             self._localized = False
             self._steps = 0
+            self._x_pred = 0.0
+            self._y_pred = 0.0
+            self._theta_pred = 0.0
 
             self._last_z_scan = None
             self._odom_measurements = []
@@ -209,6 +212,7 @@ class ParticleFilterNode(LifecycleNode):
             noise_threshold = 1e-3
             if abs(z_v) > noise_threshold or abs(z_w) > noise_threshold:
                 self._odom_measurements.append((z_v, z_w))
+            
         else: 
             # probar estos valores
             noise_threshold_v = 0.01 # 0.1
@@ -216,6 +220,16 @@ class ParticleFilterNode(LifecycleNode):
 
             if abs(z_v) > noise_threshold_v or abs(z_w) > noise_threshold_w:
                 self._odom_measurements.append((z_v, z_w))
+            # lab 4 -> make a prediction with Euler 
+            dt = self.get_parameter("dt").value
+        
+            self._x_pred += z_v * math.cos(self._theta_pred) * dt
+            self._y_pred += z_v * math.sin(self._theta_pred) * dt
+            self._theta_pred += z_w * dt
+            self._theta_pred %= 2 * math.pi
+
+            self._publish_pose_estimate(self._x_pred, self._y_pred, self._theta_pred)
+        
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
         """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.

@@ -18,6 +18,7 @@ class ParticleFilter:
         dt: float,
         map_path: str,
         particle_count: int,
+        # probar a aumentar, jugar con estos valores
         sigma_v: float = 0.05,  # initial value : 0.05
         sigma_w: float = 0.1,  # initial value : 0.1
         sigma_z: float = 0.2,  # initial value : 0.2

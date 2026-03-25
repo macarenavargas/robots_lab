@@ -72,17 +72,15 @@ class ParticleFilterNode(LifecycleNode):
 
             # Attribute and object initializations
             self._localized = False
+            self._steps = 0
             self._x_pred = 0.0
             self._y_pred = 0.0
             self._theta_pred = 0.0
 
-
-            self._steps = 0
-
             self._last_z_scan = None
             self._odom_measurements = []
 
-            self._timer_period = 4
+            self._timer_period = 5
 
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
@@ -149,8 +147,6 @@ class ParticleFilterNode(LifecycleNode):
                 self._subscriber_scan = self.create_subscription(
                     LaserScan, "/scan", callback=self._scan_callback, qos_profile=scan_qos_profile
                 )
-
-               
                 # Motion Control publisher
                 self._publisher_motion_control = self.create_publisher(
                     MotionControl, "/motion_control", qos_profile=10
@@ -216,28 +212,29 @@ class ParticleFilterNode(LifecycleNode):
             noise_threshold = 1e-3
             if abs(z_v) > noise_threshold or abs(z_w) > noise_threshold:
                 self._odom_measurements.append((z_v, z_w))
+            
         else: 
             # probar estos valores
-            noise_threshold_v = 0.01
+            noise_threshold_v = 0.01 # 0.1
             noise_threshold_w = 0.1
 
             if abs(z_v) > noise_threshold_v or abs(z_w) > noise_threshold_w:
                 self._odom_measurements.append((z_v, z_w))
+            # lab 4 -> make a prediction with Euler 
+            dt = self.get_parameter("dt").value
+        
+            self._x_pred += z_v * math.cos(self._theta_pred) * dt
+            self._y_pred += z_v * math.sin(self._theta_pred) * dt
+            self._theta_pred += z_w * dt
+            self._theta_pred %= 2 * math.pi
 
-        # lab 4 -> make a prediction with Euler 
-        dt = self.get_parameter("dt").value
-        self._x_pred += z_v * math.cos(self._theta_pred) * dt
-        self._y_pred += z_v * math.sin(self._theta_pred) * dt
-        self._theta_pred += z_w * dt
-        self._theta_pred %= 2 * math.pi
-
-        self._localized = False
-        self._publish_pose_estimate(self._x_pred, self._y_pred, self._theta_pred)
-
+            self._localized = False
+            self._publish_pose_estimate(self._x_pred, self._y_pred, self._theta_pred)
+        
+       
 
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
-        
         """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
 
         Args:
@@ -274,7 +271,7 @@ class ParticleFilterNode(LifecycleNode):
             self._particle_filter.resample(z_scan)
             sense_time = time.perf_counter() - start_time
 
-            self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
+            # self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
 
             if self._enable_plot:
                 self._particle_filter.show("Sense", save_figure=True)
@@ -283,7 +280,7 @@ class ParticleFilterNode(LifecycleNode):
             self._localized, pose = self._particle_filter.compute_pose()
             clustering_time = time.perf_counter() - start_time
 
-            self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
+            # self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
 
         return pose
 
@@ -320,16 +317,16 @@ class ParticleFilterNode(LifecycleNode):
         msg.header.frame_id = "map"
         msg.localized = self._localized
 
-        #if self._localized:
-        msg.pose.position.x = x_h
-        msg.pose.position.y = y_h
-        msg.pose.position.z = 0.0
+        if self._localized:
+            msg.pose.position.x = x_h
+            msg.pose.position.y = y_h
+            msg.pose.position.z = 0.0
 
-        qw, qx, qy, qz = euler2quat(0.0, 0.0, float(theta_h))
-        msg.pose.orientation.x = qx
-        msg.pose.orientation.y = qy
-        msg.pose.orientation.z = qz
-        msg.pose.orientation.w = qw
+            qw, qx, qy, qz = euler2quat(0.0, 0.0, float(theta_h))
+            msg.pose.orientation.x = qx
+            msg.pose.orientation.y = qy
+            msg.pose.orientation.z = qz
+            msg.pose.orientation.w = qw
 
         self._publisher_pose.publish(msg)
 
