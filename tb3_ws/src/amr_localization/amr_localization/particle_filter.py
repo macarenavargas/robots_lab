@@ -48,7 +48,7 @@ class ParticleFilter:
             simulation: True if running in simulation, False if running on the real robot.
 
         """
-        particle_count = 500
+        # particle_count = 500SSSS
         self._dt: float = dt
         self._initial_particle_count: int = particle_count
         self._logger = logger
@@ -240,8 +240,8 @@ class ParticleFilter:
         weights = np.zeros(len(self._particles))
         for i, particle in enumerate(self._particles):
             weights[i] = self._measurement_probability(z_real, particle)
-            if weights[i] > 0.2:
-                self._logger.info(f"PARTICLE {i}: {particle} -> PROBABILITY {weights[i]} | ROBOT {(0.0, -0.8, math.radians(90))}")
+            # if weights[i] > 0.2:
+                # self._logger.info(f"PARTICLE {i}: {particle} -> PROBABILITY {weights[i]} | ROBOT {(0.0, -0.8, math.radians(90))}")
 
         # STEP 4: Normalize the weights.
         weight_sum = np.sum(weights)

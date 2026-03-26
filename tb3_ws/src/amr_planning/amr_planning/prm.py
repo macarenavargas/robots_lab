@@ -533,7 +533,7 @@ if __name__ == "__main__":
     path = prm.find_path(start=(-1.0, -1.0), goal=(-0.6, 1.0))
     pathfinding_time = time.perf_counter() - start_time
 
-    print(f"Pathfinding time: {pathfinding_time:1.3f} s")
+    print(f"Path finding time: {pathfinding_time:1.3f} s")
 
     # Smooth the path
     start_time = time.perf_counter()

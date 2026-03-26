@@ -10,7 +10,7 @@ def generate_launch_description():
     start = (-1.0, -1.0, math.radians(90))
     goal = (-0.6, 1.0)
 
-    particles = 100
+    particles = 50
     global_localization = False
     start_sigma = (0.1, 0.1, math.radians(5))
     sigma_v = 0.05
@@ -77,7 +77,7 @@ def generate_launch_description():
             arguments=["--ros-args", "--log-level", "INFO"],
             parameters=[
                 {
-                    "lookahead_distance": 0.2, #0.2
+                    "lookahead_distance": 0.1, #0.2
                     "simulation": simulation,
                 }
             ],
@@ -131,16 +131,17 @@ def generate_launch_description():
 
 
     else: 
+
         particle_filter_node = LifecycleNode(
             package="amr_localization",
             executable="particle_filter",
             name="particle_filter",
             namespace="",
             output="screen",
-            arguments=["--ros-args", "--log-level", "WARN"], #"WARN"
+            arguments=["--ros-args", "--log-level", "INFO"], #"WARN"
             parameters=[
                 {
-                    "enable_plot": False,
+                    "enable_plot": True,
                     "global_localization": global_localization,
                     "initial_pose": start,
                     "initial_pose_sigma": start_sigma,
