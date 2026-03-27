@@ -79,13 +79,8 @@ class PurePursuit:
         # check if alpha is too high
         if abs(alpha) > self._alpha_threshold:
             v = 0.0 
-
-            if self._simulation: 
-                w = - 0.2 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
-            else: 
-                w =  - 0.2 * np.sign(alpha)
-
-
+            w = - 0.2 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
+            
             if self._logger: 
                 self._logger.info(f" LARGE ALPHA !! alpha={alpha:.2f}, setting v=0 and w={w:.2f}")
             return v, w
@@ -93,13 +88,11 @@ class PurePursuit:
         else: 
             # calculate the control commands
             v = self._v #v is constant in pure pursuit algorithm. 
-            
-            if self._simulation: 
-                w = - 2* v * np.sin(alpha) /  self._lookahead_distance
+            w = - 2* v * np.sin(alpha) /  self._lookahead_distance
             #w = np.clip(w, -0.3, 0.3) # limit the value so its not so big. 
-            else: 
-                w = - 2* v * np.sin(alpha) /  self._lookahead_distance
             
+            
+        
             # limit v if w is too big so that it behaves better in the curves 
             # if abs(w)> 0.3: 
             #     v = 0.1
