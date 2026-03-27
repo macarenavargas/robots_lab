@@ -1,9 +1,9 @@
-from build.amr_msgs.ament_cmake_python.amr_msgs.amr_msgs.msg._motion_control import MotionControl
+
 import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 
-from amr_msgs.msg import PoseStamped
+from amr_msgs.msg import PoseStamped, MotionControl
 from geometry_msgs.msg import Twist, TwistStamped
 from nav_msgs.msg import Path
 
@@ -99,6 +99,13 @@ class PurePursuitNode(LifecycleNode):
     
     def _motion_control_callback(self, motion_control_msg: MotionControl):
         self._allow_motion = motion_control_msg.allow_motion
+        self._logger.info(f" ---allow motion = {self._allow_motion}----")
+        if not self._allow_motion:
+            
+            self._logger.info(f" --i publish 0, 0!-- ")
+            self._publish_velocity_commands(0.0, 0.0)
+            return
+
 
 
     def _compute_commands_callback(self, pose_msg: PoseStamped):
@@ -110,30 +117,35 @@ class PurePursuitNode(LifecycleNode):
             pose_msg: Message containing the estimated robot pose.
 
         """
-        #self.get_logger().info(f"[POSE CALLBACK] localized={pose_msg.localized}")
-        if not self._allow_motion:
-            self._publish_velocity_commands(0.0, 0.0)
-            return
-
         
-        if pose_msg.localized:
-            # Parse pose
-            x = pose_msg.pose.position.x
-            y = pose_msg.pose.position.y
-            quat_w = pose_msg.pose.orientation.w
+        
+        if self._allow_motion: 
+            self._logger.info(f" entro en compute commands callback -> ALLOW MOTION = TRUE")
+        
+            if pose_msg.localized:
+                # Parse pose
+                x = pose_msg.pose.position.x
+                y = pose_msg.pose.position.y
+                quat_w = pose_msg.pose.orientation.w
 
-            quat_x = pose_msg.pose.orientation.x
-            quat_y = pose_msg.pose.orientation.y
-            quat_z = pose_msg.pose.orientation.z
-            _, _, theta = quat2euler((quat_w, quat_x, quat_y, quat_z))
-            theta %= 2 * math.pi
+                quat_x = pose_msg.pose.orientation.x
+                quat_y = pose_msg.pose.orientation.y
+                quat_z = pose_msg.pose.orientation.z
+                _, _, theta = quat2euler((quat_w, quat_x, quat_y, quat_z))
+                theta %= 2 * math.pi
 
-            # Execute pure pursuit
-            v, w = self._pure_pursuit.compute_commands(x, y, theta)
-           
-           
-            # Publish
-            self._publish_velocity_commands(v, w)
+                # Execute pure pursuit
+                # self.get_logger().info(
+                #     f"[PP] USING POSE → x={x:.2f}, y={y:.2f}, localized={pose_msg.localized}"
+                # )
+                v, w = self._pure_pursuit.compute_commands(x, y, theta)
+
+            
+                # Publish
+                self._publish_velocity_commands(v, w)
+            
+            # else: 
+            #     self._publish_velocity_commands(0.0, 0.0)
 
     def _path_callback(self, path_msg: Path):
         """Subscriber callback. Saves the path the pure pursuit controller has to follow.
@@ -179,9 +191,12 @@ class PurePursuitNode(LifecycleNode):
             msg.twist.linear.x = v
             msg.twist.angular.z = w
         else:
+            
             msg = Twist()
             msg.linear.x = v
             msg.angular.z = w
+            if v == 0.0 and w == 0.0: 
+                self._logger.info(" FROM PURE PURSUIT NODE I STOP THE ROBOT -> v = 0 and w = 0 ")
 
         self._publisher.publish(msg)
 

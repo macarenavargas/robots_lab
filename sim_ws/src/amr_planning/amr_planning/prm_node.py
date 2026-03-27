@@ -148,6 +148,9 @@ class PRMNode(LifecycleNode):
             # localize the robot for the first tiem  
             start = (pose_msg.pose.position.x, pose_msg.pose.position.y)
             self.get_logger().info("Robot localized for the first time. Computing path.")
+            self.get_logger().info(
+                f"[PRM] POSE START LOCALIZED USED → x={pose_msg.pose.position.x:.2f}, y={pose_msg.pose.position.y:.2f}"
+            )
             start_time = time.perf_counter()
             # find the path from the start to the goal using A* algorithm.
             path = self._planning.find_path(start, self._goal)

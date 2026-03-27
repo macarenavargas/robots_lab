@@ -1,4 +1,5 @@
 import numpy as np 
+import math 
 class PurePursuit:
     """Class to follow a path using a simple pure pursuit controller."""
 
@@ -20,10 +21,10 @@ class PurePursuit:
         """
         self._dt: float = dt
         self._logger = logger
-        self._lookahead_distance: float = lookahead_distance
+        self._lookahead_distance: float = 0.25 #lookahead_distance
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
-        self._v : float = 0.15
+        self._v : float = 0.15 # 0.15 
         self._alpha_threshold:float = 0.5
         self._last_closest_idx: int = 0 
 
@@ -43,8 +44,8 @@ class PurePursuit:
         """
         # TODO: 4.11. Complete the function body with your code (i.e., compute v and w).
         if not self._path:
-            if self._logger:
-                self._logger.warn("No path available in Pure Pursuit")
+            # if self._logger:
+            #     self._logger.warn("No path available in Pure Pursuit")
             return 0.0, 0.0
         
         
@@ -65,8 +66,11 @@ class PurePursuit:
         # values between 0 and 2pi 
         beta = np.arctan2(y_target - y, x_target - x)
         alpha = beta - theta 
-        alpha = (alpha + np.pi) % (2 * np.pi) - np.pi
-        #alpha = alpha % (2 * np.pi)
+
+        if self._simulation: 
+            alpha = (alpha + np.pi) % (2 * np.pi) - np.pi
+        else: 
+            alpha = math.atan2(math.sin(alpha), math.cos(alpha))
 
         if self._logger:
             self._logger.info(f"PURE PERSUIT:lookeahead distance = {self._lookahead_distance:.2f}, target point = {target_xy}, alpha = {alpha:.2f} rad")
@@ -76,7 +80,7 @@ class PurePursuit:
         if abs(alpha) > self._alpha_threshold:
             v = 0.0 
             w = - 0.2 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
-
+            
             if self._logger: 
                 self._logger.info(f" LARGE ALPHA !! alpha={alpha:.2f}, setting v=0 and w={w:.2f}")
             return v, w
@@ -84,9 +88,14 @@ class PurePursuit:
         else: 
             # calculate the control commands
             v = self._v #v is constant in pure pursuit algorithm. 
-
             w = - 2* v * np.sin(alpha) /  self._lookahead_distance
             #w = np.clip(w, -0.3, 0.3) # limit the value so its not so big. 
+            
+            
+        
+            # limit v if w is too big so that it behaves better in the curves 
+            # if abs(w)> 0.3: 
+            #     v = 0.1
             
             if self._logger:
                 self._logger.info(f"PURE PERSUIT: v = {v:+.3f} m/s, w = {w:+.3f} rad/s, {alpha:.2f} rad")
@@ -159,11 +168,11 @@ class PurePursuit:
          # TODO: 4.10. Complete the function body 
         target_xy = (0.0, 0.0) # default value if no point is found.
         
-        #cdist de numpy 
+        #cdist of numpy (?)
         for i in range(origin_idx, len(self.path)): 
 
             distance = np.linalg.norm(np.array(self.path[i]) - np.array(origin_xy))
-            if distance >= self._lookahead_distance: 
+            if distance > self._lookahead_distance: #>= (?)
                 # strategy : we choose the first point that passes the distance 
                 target_xy = self.path[i]
                 return target_xy
