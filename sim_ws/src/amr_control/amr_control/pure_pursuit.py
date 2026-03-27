@@ -21,7 +21,7 @@ class PurePursuit:
         """
         self._dt: float = dt
         self._logger = logger
-        self._lookahead_distance: float = 0.25 #lookahead_distance
+        self._lookahead_distance: float = lookahead_distance # 0.25 in real robot 
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
         self._v : float = 0.15 # 0.15 

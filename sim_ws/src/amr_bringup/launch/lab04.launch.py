@@ -5,7 +5,7 @@ import math
 
 
 def generate_launch_description():
-    simulation = False 
+    simulation = True 
     world = "project"
     start = (-1.0, -1.0, math.radians(90))
     goal = (-0.6, 1.0)
@@ -77,7 +77,7 @@ def generate_launch_description():
             arguments=["--ros-args", "--log-level", "INFO"],
             parameters=[
                 {
-                    "lookahead_distance": 0.1, #0.2
+                    "lookahead_distance": 0.2, #0.2
                     "simulation": simulation,
                 }
             ],
@@ -189,7 +189,7 @@ def generate_launch_description():
             arguments=["--ros-args", "--log-level", "INFO"],
             parameters=[
                 {
-                    "lookahead_distance": 0.2, #0.2
+                    "lookahead_distance": 0.25, #0.2
                     "simulation": simulation,
                 }
             ],
