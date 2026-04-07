@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'odometry_node = amr_turtlebot3.odometry_node:main',
+            'odometry = amr_turtlebot3.odometry_node:main',
             'monitoring = amr_turtlebot3.monitoring_node:main'
         ],
     },

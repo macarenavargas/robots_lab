@@ -16,9 +16,9 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "enable_plot": False,
+                "enable_plot": True,
                 "global_localization": True,
-                "particles": 500,
+                "particles": 100,
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
                 "sigma_z": 0.2,
@@ -38,11 +38,11 @@ def generate_launch_description():
         parameters=[
             {
                 "connection_distance": 0.15,
-                "enable_plot": False,
+                "enable_plot": True,
                 "goal": goal,
                 "grid_size": 0.1,
                 "node_count": 250,
-                "obstacle_safety_distance": 0.12,
+                "obstacle_safety_distance": 0.15,
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
                 "smoothing_data_weight": 0.1,
@@ -55,8 +55,8 @@ def generate_launch_description():
 
     odometry_node = LifecycleNode(
         package="amr_turtlebot3",
-        executable="odometry_node",
-        name="odometry_node",
+        executable="odometry",
+        name="odometry",
         namespace="",
         output="screen",
         arguments=["--ros-args", "--log-level", "INFO"],
@@ -93,7 +93,7 @@ def generate_launch_description():
     )
 
     monitoring_node = LifecycleNode(
-        package="amr_simulation",
+        package="amr_turtlebot3",
         executable="monitoring",
         name="monitoring",
         namespace="",
@@ -111,13 +111,13 @@ def generate_launch_description():
         package="amr_bringup",
         executable="lifecycle_manager",
         output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
+        arguments=["--ros-args", "--log-level", "INFO"],
         parameters=[
             {
                 "node_startup_order": (
                     "particle_filter",
                     "probabilistic_roadmap",
-                    "odometry_node",
+                    "odometry",
                     "wall_follower",
                     "pure_pursuit",
                     "monitoring",

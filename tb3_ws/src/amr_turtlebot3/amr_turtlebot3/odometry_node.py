@@ -8,7 +8,7 @@ from nav_msgs.msg import Odometry
 
 class OdometryNode(Node):  # Nodes inherit from the base class Node
     def __init__(self) -> None:
-        super().__init__("minimal_subscriber")  # Set the node name
+        super().__init__("odometry")
         self.prev_time = None
         self.prev_x = 0.0
         self.prev_y = 0.0
