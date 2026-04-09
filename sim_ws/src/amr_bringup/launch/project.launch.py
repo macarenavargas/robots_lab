@@ -7,8 +7,17 @@ import math
 def generate_launch_description():
     simulation = True
     world = "project"
-    start = (-1.0, -1.0, math.radians(90))
-    goal = (-0.6, 1.0)
+    # POINT 1
+    a = (-1.0, -1.0, math.radians(90))
+    d = (1.0, 1.0, math.radians(-90))
+    e = (-0.6, 1.0, math.radians(0))
+    c = (1.0, -1.0, math.radians(90))
+    b = (0.2, -0.6, math.radians(0))
+    f = (-1, 0.6, math.radians(0))
+    # start = (-1.0, -1.0, math.radians(90))
+    # goal = (-0.6, 1.0)
+    start = a
+    goal = (f[0], f[1])
 
     particle_filter_node = LifecycleNode(
         package="amr_localization",
@@ -21,7 +30,7 @@ def generate_launch_description():
             {
                 "enable_plot": False,
                 "global_localization": True,
-                "particles": 500,
+                "particles": 3000,  # 500,
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
                 "sigma_z": 0.2,
@@ -41,11 +50,11 @@ def generate_launch_description():
         parameters=[
             {
                 "connection_distance": 0.15,
-                "enable_plot": False,
+                "enable_plot": True,
                 "goal": goal,
                 "grid_size": 0.1,
                 "node_count": 250,
-                "obstacle_safety_distance": 0.12,
+                "obstacle_safety_distance": 0.15,  # 0.12,
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
                 "smoothing_data_weight": 0.1,
