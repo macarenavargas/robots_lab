@@ -7,17 +7,17 @@ import math
 def generate_launch_description():
     simulation = True
     world = "project"
-    # POINT 1
-    a = (-1.0, -1.0, math.radians(90))
-    d = (1.0, 1.0, math.radians(-90))
-    e = (-0.6, 1.0, math.radians(0))
-    c = (1.0, -1.0, math.radians(90))
-    b = (0.2, -0.6, math.radians(0))
-    f = (-1, 0.6, math.radians(0))
+
+    a = (-1.0, -1.0, math.radians(90)) # left bottom corner
+    d = (1.0, 1.0, math.radians(-90)) # right top corner
+    e = (-0.6, 1.0, math.radians(0)) # left top corner
+    c = (1.0, -1.0, math.radians(90)) # right bottom corner
+    b = (0.2, -0.6, math.radians(0)) # low middle point 
+    f = (-1, 0.6, math.radians(0)) # middle left point
     # start = (-1.0, -1.0, math.radians(90))
     # goal = (-0.6, 1.0)
     start = a
-    goal = (f[0], f[1])
+    goal = (c[0], c[1])
 
     particle_filter_node = LifecycleNode(
         package="amr_localization",
@@ -28,8 +28,8 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "enable_plot": False,
-                "global_localization": True,
+                "enable_plot": True, #False
+                "global_localization": True, #True
                 "particles": 3000,  # 500,
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
@@ -50,16 +50,16 @@ def generate_launch_description():
         parameters=[
             {
                 "connection_distance": 0.15,
-                "enable_plot": True,
+                "enable_plot": True, # True 
                 "goal": goal,
                 "grid_size": 0.1,
-                "node_count": 250,
+                "node_count": 250, #250
                 "obstacle_safety_distance": 0.15,  # 0.12,
                 "simulation": simulation,
-                "smoothing_additional_points": 3,
-                "smoothing_data_weight": 0.1,
-                "smoothing_smooth_weight": 0.25,
-                "use_grid": True,
+                "smoothing_additional_points": 3, #3
+                "smoothing_data_weight": 0.1, #0.1
+                "smoothing_smooth_weight": 0.25, # 0.25
+                "use_grid": True, # True 
                 "world": world,
             }
         ], 
