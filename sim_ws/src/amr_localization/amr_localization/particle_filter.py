@@ -9,6 +9,7 @@ from amr_localization.maps import Map
 from matplotlib import pyplot as plt
 from sklearn.cluster import DBSCAN
 
+
 # peso de cada prtiucla + localiacion de la particula y el robot.
 class ParticleFilter:
     """Particle filter implementation."""
@@ -52,7 +53,7 @@ class ParticleFilter:
         self._dt: float = dt
         self._initial_particle_count: int = particle_count
         self._logger = logger
-        self._particle_count: int = particle_count # particle_count
+        self._particle_count: int = particle_count  # particle_count
         self._sensor_range_max: float = sensor_range_max
         self._sensor_range_min: float = sensor_range_min
         self._sigma_v: float = sigma_v
@@ -60,7 +61,10 @@ class ParticleFilter:
         self._sigma_z: float = sigma_z
         self._simulation: bool = simulation
         self._iteration: int = 0
-        self._num_rays = 8 #8
+        self._num_rays = 8  # 8
+        # self._localized = False
+
+        self.average_likelihood = 0
 
         self._map = Map(
             map_path,
@@ -89,21 +93,23 @@ class ParticleFilter:
 
         """
         # TODO: 3.10. Complete the missing function body with your code.
-        localized: bool = False
+
         pose: tuple[float, float, float] = (float("inf"), float("inf"), float("inf"))
 
-        # extract the data
+        # STEP 1: extract the data
         x_p = self._particles[:, 0].astype(float)
         y_p = self._particles[:, 1].astype(float)
         th_p = self._particles[:, 2].astype(float)
         features = np.column_stack((x_p, y_p, np.sin(th_p), np.cos(th_p)))
 
-        # create the Clustering object
+        # STEP 2: create the Clustering object
         # eps: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
-        # try changing eps and min_samples
-        db = DBSCAN(eps=0.1,min_samples=15).fit(features) # 15
-        # labels_: Cluster labels for each point in the dataset given to fit().
-        # Noisy samples are given the label -1. Non-negative integers indicate cluster membership.
+        if self._simulation:
+            db = DBSCAN(eps=0.2, min_samples=15).fit(features)
+        else:
+            db = DBSCAN(eps=0.1, min_samples=15).fit(features)
+
+        # STEP 3: Extract the labels of the current clusters
         labels = db.labels_
 
         # extract the unique labels of each cluster
@@ -114,8 +120,8 @@ class ParticleFilter:
             unique_labels.remove(-1)
 
         n_clusters = len(unique_labels)
-
-        # if we only have one cluster left -> localized
+        localized = False
+        # STEP 4: compute actions based on the number of clusters
         if n_clusters == 1:
             # since we create a new dbscan object each iteration, when we only have one cluster left,
             # we know that its label assigned will be 0
@@ -125,47 +131,33 @@ class ParticleFilter:
 
             # security filter to make sure that most of the particles are actually in the cluster
             if percentage_in_cluster > 0.7 and np.sum(mask) > 30:
-                # self._logger.info(f"Clustering criteria accomplished ")
-                # the robot has been localized
-                localized = True
-
-                # calculate centroid with atan2
                 x_hat = float(x_p[mask].mean())
                 y_hat = float(y_p[mask].mean())
                 th_hat = float(math.atan2(np.sin(th_p[mask]).mean(), np.cos(th_p[mask]).mean()))
-
                 pose = (x_hat, y_hat, th_hat)
-
                 self._particle_count = 50
-
-                if self._logger:
-                    self._logger.info(
-                        f"LOCALIZED | x: {x_hat:.2f}m, y: {y_hat:.2f}m, th: {math.degrees(th_hat):.1f}º | Particles reduced to 50."
-                    )
+                # if self._logger:
+                #     self._logger.warning(
+                #         f"LOCALIZED | x: {x_hat:.2f}m, y: {y_hat:.2f}m, th: {math.degrees(th_hat):.1f}º | Particles reduced to 50."
+                #     )
+                #     self._logger.warning(
+                #         f" AVERAGE LIKELIHOOD WHEN LOCALIZED: {self.average_likelihood}"
+                #     )
+                localized = True
             else:
                 # means that some particles have been grouped by chance, but in reality most of the particles are diseprsed
                 localized = False
 
-        # elif n_clusters > 1:
         elif n_clusters > 1:
-            # # if we have multiple clusters
             localized = False
-            # # asign 100 particles for each cluster that exists
-            particles_needed = n_clusters * 100  # 100
-
-            # # we put an upper bound limit so that we dont create more particles than self._initial_particle_count
-            # # we put an lower bound so that we habe at leas 200 particles during the whole process
+            particles_needed = n_clusters * 100
             self._particle_count = min(self._initial_particle_count, max(200, particles_needed))
-
-            # # tests to see optimal methods  :
-     
             if self._logger:
                 self._logger.info(
                     f"MULTIPLE HIPOTHESIS: There are {n_clusters} posible locations (clusters). Active particles: {self._particle_count}."
                 )
 
         else:
-            # n_clusters == 0: the robot is lost
             localized = False
             self._particle_count = self._initial_particle_count
             if self._logger:
@@ -240,8 +232,6 @@ class ParticleFilter:
         weights = np.zeros(len(self._particles))
         for i, particle in enumerate(self._particles):
             weights[i] = self._measurement_probability(z_real, particle)
-            # if weights[i] > 0.2:
-                # self._logger.info(f"PARTICLE {i}: {particle} -> PROBABILITY {weights[i]} | ROBOT {(0.0, -0.8, math.radians(90))}")
 
         # STEP 4: Normalize the weights.
         weight_sum = np.sum(weights)
@@ -250,6 +240,10 @@ class ParticleFilter:
         else:
             # safety preacaution: If every particle has 0 probability -> asign uniform weights
             weights = np.ones(len(self._particles)) / len(self._particles)
+
+        self.average_likelihood = weight_sum / len(self._particles)
+        if self._logger:
+            self._logger.warning(f"AVG WEIGHT {self.average_likelihood} ")
 
         # STEP 5: apply sistematic resampling
         N = self._particle_count  # get current particle count ( updated by dbscan )
@@ -391,17 +385,14 @@ class ParticleFilter:
         Returns: A NumPy array of tuples (x, y, theta) [m, m, rad].
 
         """
-
-   
+        self._logger.warn(f"particle count init {particle_count}")
         particles = np.empty((particle_count, 3), dtype=float)
-        # particles[0]=(0, -0.8, math.radians(90))
         valid_orientations = [0, math.pi / 2, math.pi, math.pi * 3 / 2]
         x_min, y_min, x_max, y_max = self._map.bounds()
 
         # TODO: 3.4. Complete the missing function body with your code.
 
         num_particled_created = 0
-        # num_particled_created=1
 
         while num_particled_created < particle_count:
             if global_localization:
@@ -421,7 +412,7 @@ class ParticleFilter:
                 particles[num_particled_created, 1] = y
                 particles[num_particled_created, 2] = theta
                 num_particled_created += 1
-        
+
         return particles
 
     def _sense(self, pose: tuple[float, float, float]) -> list[float]:
@@ -536,7 +527,5 @@ class ParticleFilter:
         # calculate the likelihood of the particle with the robot
         for i in range(self._num_rays):
             probability *= self._gaussian(particle_measurements[i], self._sigma_z, measurements[i])
-
-
 
         return probability
