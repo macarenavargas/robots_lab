@@ -53,7 +53,7 @@ def generate_launch_description():
                 "use_grid": True,
                 "world": world,
             }
-        ],
+        ], 
     )
 
     wall_follower_node = LifecycleNode(
