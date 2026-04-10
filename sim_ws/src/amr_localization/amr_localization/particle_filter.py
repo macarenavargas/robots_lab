@@ -82,6 +82,9 @@ class ParticleFilter:
             "%Y-%m-%d_%H-%M-%S"
         )
 
+        # adding feature -> use C++ or not 
+        self._use_cpp = False 
+
     def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
         """Computes the pose estimate when the particles form a single DBSCAN cluster.
 
@@ -424,7 +427,7 @@ class ParticleFilter:
 
     # this is the _sense function from before. 
     # if C++ doesnt work, use this as _sense. 
-    def _sense(self, pose: tuple[float, float, float]) -> list[float]:
+    def _sense_python(self, pose: tuple[float, float, float]) -> list[float]:
         """Obtains the predicted measurement of every LiDAR ray given the robot's pose.
 
         Args:
@@ -458,28 +461,21 @@ class ParticleFilter:
 
     # sense that implements the c++ version
     def _sense_cpp(self, pose):
-        return self.sense_python(
+        return cpp_module.sense(
             pose,
-            self._lidar_rays,
-            self._map,
-            self._num_rays
+            self._map.segments,
+            self._num_rays,
+            self._sensor_range_max
         )
 
-    def sense_python(pose, lidar_rays_func, map_obj, num_rays):
-        z_hat = []
+    def _sense(self, pose:tuple[float, float, float])-> list[float]: 
+        
+        if self._use_cpp: # if we want to use C++
+            return self._sense_cpp(pose)
+        else: # if we want to use Python 
+            return self._sense_python(pose)
 
-        idxs = np.linspace(0, 239, num_rays, dtype=int)
-        selected_rays = lidar_rays_func(pose, idxs)
-
-        for ray in selected_rays:
-            _, distance = map_obj.check_collision(ray, True)
-
-            if distance is None:
-                z_hat.append(float("nan"))
-            else:
-                z_hat.append(distance)
-
-        return z_hat
+  
   
     @staticmethod
     def _gaussian(mu: float, sigma: float, x: float) -> float:
