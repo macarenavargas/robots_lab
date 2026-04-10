@@ -16,7 +16,7 @@ def generate_launch_description():
     f = (-1, 0.6, math.radians(0))
     # start = (-1.0, -1.0, math.radians(90))
     # goal = (-0.6, 1.0)
-    start = a
+    start = c
     goal = (f[0], f[1])
 
     particle_filter_node = LifecycleNode(
@@ -30,7 +30,7 @@ def generate_launch_description():
             {
                 "enable_plot": False,
                 "global_localization": True,
-                "particles": 3000,  # 500,
+                "particles": 500,  # 500,
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
                 "sigma_z": 0.2,

@@ -4,6 +4,7 @@ import numpy as np
 import os
 import pytz
 import random
+import time 
 
 from amr_localization.maps import Map
 from matplotlib import pyplot as plt
@@ -176,7 +177,7 @@ class ParticleFilter:
 
         """
         self._iteration += 1
-
+        start = time.time() 
         # TODO: 3.5. Complete the function body with your code.
 
         n_particles = len(self._particles)
@@ -216,6 +217,9 @@ class ParticleFilter:
         self._particles[:, 1] = y_new
         self._particles[:, 2] = theta_new
 
+
+        print("MOVING TIME :", time.time() - start)
+
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
 
@@ -225,6 +229,7 @@ class ParticleFilter:
         """
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
 
+     
         # STEP 1: extract the 8 lidar values and clean them.
         z_real = self._extract_robust_measurements(measurements)
 
@@ -259,6 +264,8 @@ class ParticleFilter:
 
         # STEP 6: update the aprticle array with the surviving particles.
         self._particles = self._particles[indices]
+
+
 
     def _extract_robust_measurements(
         self, measurements: list[float], window_size: int = 3
@@ -415,6 +422,8 @@ class ParticleFilter:
 
         return particles
 
+    # this is the _sense function from before. 
+    # if C++ doesnt work, use this as _sense. 
     def _sense(self, pose: tuple[float, float, float]) -> list[float]:
         """Obtains the predicted measurement of every LiDAR ray given the robot's pose.
 
@@ -424,7 +433,7 @@ class ParticleFilter:
         Returns: List of predicted measurements; nan if a sensor is out of range.
 
         """
-
+    
         z_hat: list[float] = []
 
         # TODO: 3.6. Complete the missing function body with your code.
@@ -442,8 +451,36 @@ class ParticleFilter:
                 z_hat.append(float("nan"))
             else:
                 z_hat.append(distance)
+       
         return z_hat
+    
 
+
+    # sense that implements the c++ version
+    def _sense_cpp(self, pose):
+        return self.sense_python(
+            pose,
+            self._lidar_rays,
+            self._map,
+            self._num_rays
+        )
+
+    def sense_python(pose, lidar_rays_func, map_obj, num_rays):
+        z_hat = []
+
+        idxs = np.linspace(0, 239, num_rays, dtype=int)
+        selected_rays = lidar_rays_func(pose, idxs)
+
+        for ray in selected_rays:
+            _, distance = map_obj.check_collision(ray, True)
+
+            if distance is None:
+                z_hat.append(float("nan"))
+            else:
+                z_hat.append(distance)
+
+        return z_hat
+  
     @staticmethod
     def _gaussian(mu: float, sigma: float, x: float) -> float:
         """Computes the value of a Gaussian.
@@ -520,7 +557,9 @@ class ParticleFilter:
         # TODO: 3.8. Complete the missing function body with your code.
 
         # take the particles ray measurements
+        start = time.time()
         particle_measurements = self._sense(particle)
+        print("SENSING TIME :", time.time() - start)
 
         particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_min)
 
