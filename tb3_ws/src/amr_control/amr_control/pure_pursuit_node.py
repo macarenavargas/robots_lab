@@ -99,10 +99,10 @@ class PurePursuitNode(LifecycleNode):
     
     def _motion_control_callback(self, motion_control_msg: MotionControl):
         self._allow_motion = motion_control_msg.allow_motion
-        self._logger.info(f" ---allow motion = {self._allow_motion}----")
+        
         if not self._allow_motion:
             
-            self._logger.info(f" --i publish 0, 0!-- ")
+            
             self._publish_velocity_commands(0.0, 0.0)
             return
 
@@ -120,7 +120,7 @@ class PurePursuitNode(LifecycleNode):
         
         
         if self._allow_motion: 
-            self._logger.info(f" entro en compute commands callback -> ALLOW MOTION = TRUE")
+            
         
             if pose_msg.localized:
                 # Parse pose
@@ -195,8 +195,7 @@ class PurePursuitNode(LifecycleNode):
             msg = Twist()
             msg.linear.x = v
             msg.angular.z = w
-            if v == 0.0 and w == 0.0: 
-                self._logger.info(" FROM PURE PURSUIT NODE I STOP THE ROBOT -> v = 0 and w = 0 ")
+            
 
         self._publisher.publish(msg)
 

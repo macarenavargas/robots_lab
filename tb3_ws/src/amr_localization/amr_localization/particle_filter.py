@@ -114,6 +114,10 @@ class ParticleFilter:
             unique_labels.remove(-1)
 
         n_clusters = len(unique_labels)
+        if self._logger:
+            self._logger.info(
+                f"particles right now: {self._particle_count}"
+            )
 
         # if we only have one cluster left -> localized
         if n_clusters == 1:
@@ -125,7 +129,7 @@ class ParticleFilter:
 
             # security filter to make sure that most of the particles are actually in the cluster
             if percentage_in_cluster > 0.7 and np.sum(mask) > 30:
-                # self._logger.info(f"Clustering criteria accomplished ")
+                
                 # the robot has been localized
                 localized = True
 
@@ -138,10 +142,10 @@ class ParticleFilter:
 
                 self._particle_count = 50
 
-                if self._logger:
-                    self._logger.info(
-                        f"LOCALIZED | x: {x_hat:.2f}m, y: {y_hat:.2f}m, th: {math.degrees(th_hat):.1f}º | Particles reduced to 50."
-                    )
+                # if self._logger:
+                #     self._logger.info(
+                #         f"LOCALIZED | x: {x_hat:.2f}m, y: {y_hat:.2f}m, th: {math.degrees(th_hat):.1f}º | Particles reduced to 50."
+                #     )
             else:
                 # means that some particles have been grouped by chance, but in reality most of the particles are diseprsed
                 localized = False
@@ -193,7 +197,7 @@ class ParticleFilter:
         v_gauss = v + np.random.normal(0, self._sigma_v, n_particles)
         w_gauss = w + np.random.normal(0, self._sigma_w, n_particles)
 
-        # self._logger.info(f"move the particle {v,w}")
+        
 
         # extract value arrays
         x_prev = self._particles[:, 0]
@@ -236,13 +240,20 @@ class ParticleFilter:
         # STEP 1: extract the 8 lidar values and clean them.
         z_real = self._extract_robust_measurements(measurements)
 
+        real_idxs = np.linspace(0, len(measurements) - 1, self._num_rays, dtype=int)
+        sense_idxs = np.linspace(0, 239, self._num_rays, dtype=int)
+        # if self._logger is not None:
+        #     self._logger.info(
+        #         f"[PF][RAY_COMPARE] len(scan)={len(measurements)} | "
+        #         f"real_idxs={real_idxs.tolist()} | "
+        #         f"sense_idxs={sense_idxs.tolist()}"
+        #     )
+
         # STEP 2: calcualte the weights of each particle (how important they are)
         weights = np.zeros(len(self._particles))
         for i, particle in enumerate(self._particles):
             weights[i] = self._measurement_probability(z_real, particle)
-            # if weights[i] > 0.2:
-                # self._logger.info(f"PARTICLE {i}: {particle} -> PROBABILITY {weights[i]} | ROBOT {(0.0, -0.8, math.radians(90))}")
-
+            
         # STEP 4: Normalize the weights.
         weight_sum = np.sum(weights)
         if weight_sum > 0:
@@ -281,6 +292,11 @@ class ParticleFilter:
 
         # STEP 2: calculate the 8 lidar rays
         idxs = np.linspace(0, n_real - 1, self._num_rays, dtype=int)
+        # if self._logger is not None:
+        #     self._logger.info(
+        #         f"[PF]f[REAL_RAYS] n_real={n_real} | "
+        #         f"real_idxs={idxs.tolist()}"
+        #     )
 
         # STEP 3: initializy empty array for extracted rays
         extracted = np.empty(self._num_rays, dtype=float)

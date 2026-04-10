@@ -44,19 +44,14 @@ class PurePursuit:
         """
         # TODO: 4.11. Complete the function body with your code (i.e., compute v and w).
         if not self._path:
-            # if self._logger:
-            #     self._logger.warn("No path available in Pure Pursuit")
+    
             return 0.0, 0.0
         
         
 
         # get the closest and target points 
         closest_xy, closest_idx = self._find_closest_point(x,y)
-        # if self._logger:
-        #     self._logger.debug(
-        #         f"[CLOSEST] idx={closest_idx}, point={closest_xy}"
-        #     )
-
+   
         target_xy = self._find_target_point(closest_xy ,closest_idx )
         #target_xy = self._find_target_point((x,y),closest_idx )
         x_target,y_target = target_xy
@@ -72,10 +67,7 @@ class PurePursuit:
         else: 
             alpha = math.atan2(math.sin(alpha), math.cos(alpha))
 
-        if self._logger:
-            self._logger.info(f"PURE PERSUIT:lookeahead distance = {self._lookahead_distance:.2f}, target point = {target_xy}, alpha = {alpha:.2f} rad")
-             
-        
+       
         # check if alpha is too high
         if abs(alpha) > self._alpha_threshold:
             v = 0.0 
@@ -150,8 +142,7 @@ class PurePursuit:
 
 
         self._last_closest_idx = closest_idx
-        if self._logger:
-            self._logger.info(f"Closest point: {closest_xy} at index {closest_idx} with distance {closest_distance:.2f}")
+        
         return closest_xy, closest_idx
     
 
@@ -183,6 +174,5 @@ class PurePursuit:
             target_xy = self.path[-1] # return goal 
             return target_xy
     
-        if self._logger:
-            self._logger.info(f"Target point: {target_xy} at index {origin_idx}")
+      
         return target_xy

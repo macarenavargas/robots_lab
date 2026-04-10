@@ -209,6 +209,12 @@ class ParticleFilterNode(LifecycleNode):
         self._timer.reset()
 
     def _scan_callback(self, scan_msg: LaserScan):
+    #     self.get_logger().info(
+    #     f"[PF][SCAN] len(scan)={len(scan_msg.ranges)} | "
+    #     f"angle_min={scan_msg.angle_min:.4f} | "
+    #     f"angle_max={scan_msg.angle_max:.4f} | "
+    #     f"angle_increment={scan_msg.angle_increment:.6f}"
+    # )
         self._last_z_scan = scan_msg.ranges
 
     def _odometry_callback(self, odom_msg: Odometry):
@@ -298,7 +304,7 @@ class ParticleFilterNode(LifecycleNode):
         self._particle_filter.move(z_v, z_w)
         move_time = time.perf_counter() - start_time
 
-        self.get_logger().info(f"Move step time: {move_time:7.3f} s")
+        # self.get_logger().info(f"Move step time: {move_time:7.3f} s")
 
         if self._enable_plot:
             self._particle_filter.show("Move", save_figure=True)
