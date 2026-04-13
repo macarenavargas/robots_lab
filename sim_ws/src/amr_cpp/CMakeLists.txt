@@ -31,12 +31,12 @@ list(APPEND CMAKE_PREFIX_PATH ${nanobind_ROOT})
 find_package(nanobind CONFIG REQUIRED)
 
 # add here the python modules every time we make a new function
-nanobind_add_module(pf_cpp
+nanobind_add_module(cpp_module
   src/bindings.cpp
   src/pf_core.cpp
 )
 
-install(TARGETS pf_cpp
+install(TARGETS cpp_module
   LIBRARY DESTINATION lib
 )
 

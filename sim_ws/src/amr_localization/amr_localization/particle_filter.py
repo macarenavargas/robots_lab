@@ -13,7 +13,7 @@ from sklearn.cluster import DBSCAN
 
 # import the c++ module
 import sys
-sys.path.append("/workspaces/robots_lab/sim_ws/src/cpp_module/build")
+sys.path.append("/workspaces/robots_lab/sim_ws/install/amr_cpp/lib")
 
 import cpp_module
 
@@ -89,7 +89,7 @@ class ParticleFilter:
         )
 
         # adding feature -> use C++ or not 
-        self._use_cpp = False 
+        self._use_cpp = True 
 
     def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
         """Computes the pose estimate when the particles form a single DBSCAN cluster.
