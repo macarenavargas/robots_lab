@@ -5,38 +5,11 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# Find dependencies
+# find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(rclcpp_lifecycle REQUIRED)
-
-find_package(eigen3_cmake_module REQUIRED)
-find_package(Eigen3 REQUIRED)
-find_package(nanobind REQUIRED) # i added this 
-
-# Add C++ "include" directory
-include_directories(include)
-
-# Create C++ executables
-add_executable(lifecycle src/lifecycle_node.cpp)
-ament_target_dependencies(lifecycle rclcpp rclcpp_lifecycle)
-
-# i added this add module 
-nanobind_add_module(pf_cpp
-  NB_STATIC       
-  src/bindings.cpp
-  src/pf_core.cpp
-)
-
-# Install C++ executables
-install(TARGETS
-  lifecycle
-  DESTINATION lib/${PROJECT_NAME})
-
-install(TARGETS pf_cpp
-  LIBRARY DESTINATION lib
-)
-
+# uncomment the following section in order to fill in
+# further dependencies manually.
+# find_package(<dependency> REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -50,5 +23,4 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-ament_export_include_directories(include)
 ament_package()
