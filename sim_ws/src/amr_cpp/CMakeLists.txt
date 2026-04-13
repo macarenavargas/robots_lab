@@ -6,15 +6,11 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 
-# python 
-if (CMAKE_VERSION VERSION_LESS 3.18)
-  set(DEV_MODULE Development)
-else()
-  set(DEV_MODULE Development.Module)
-endif()
+set(Python_EXECUTABLE /usr/bin/python3)
+set(Python_INCLUDE_DIR /usr/include/python3.10)
+set(Python_LIBRARY /usr/lib/x86_64-linux-gnu/libpython3.10.so)
 
-find_package(Python 3.9 COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
-
+find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development)
 
 
 
@@ -24,18 +20,20 @@ find_package(ament_cmake REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
-
-
-
 execute_process(
   COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
-  OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
+  OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT
+)
+
+list(APPEND CMAKE_PREFIX_PATH ${nanobind_ROOT})
 
 find_package(nanobind CONFIG REQUIRED)
 
 # add here the python modules every time we make a new function
-nanobind_add_module(pf_cpp src/pf_cpp.cpp)
-
+nanobind_add_module(pf_cpp
+  src/bindings.cpp
+  src/pf_core.cpp
+)
 
 install(TARGETS pf_cpp
   LIBRARY DESTINATION lib

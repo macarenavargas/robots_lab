@@ -1,10 +1,9 @@
 #include <nanobind/nanobind.h>
+
 namespace nb = nanobind;
 
-int add(int a, int b) {
-    return a + b;
-}
+std::vector<float> sense_cpp(...);
 
 NB_MODULE(pf_cpp, m) {
-    m.def("add", &add);
+    m.def("sense", &sense_cpp);
 }
