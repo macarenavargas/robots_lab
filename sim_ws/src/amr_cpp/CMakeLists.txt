@@ -33,7 +33,8 @@ find_package(nanobind CONFIG REQUIRED)
 # add here the python modules every time we make a new function
 nanobind_add_module(cpp_module
   src/bindings.cpp
-  src/pf_core.cpp
+  src/sense.cpp
+  src/resample.cpp
 )
 
 install(TARGETS cpp_module

@@ -232,13 +232,24 @@ class ParticleFilter:
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
 
+        Dispatches to the C++ or Python implementation depending on self._use_cpp.
+
         Args:
             measurements: Sensor measurements [m].
 
         """
-        # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
+        if self._use_cpp:
+            self._resample_cpp(measurements)
+        else:
+            self._resample_python(measurements)
 
-     
+    def _resample_python(self, measurements: list[float]) -> None:
+        """Python implementation of the resample step.
+
+        Args:
+            measurements: Sensor measurements [m].
+
+        """
         # STEP 1: extract the 8 lidar values and clean them.
         z_real = self._extract_robust_measurements(measurements)
 
@@ -273,6 +284,34 @@ class ParticleFilter:
 
         # STEP 6: update the aprticle array with the surviving particles.
         self._particles = self._particles[indices]
+
+    def _resample_cpp(self, measurements: list[float]) -> None:
+        """C++ implementation of the resample step.
+
+        Calls cpp_module.resample(), which runs steps 1-6 entirely in C++:
+        extract measurements → compute weights (sense + Gaussian) →
+        normalize → systematic resampling → return new particles.
+
+        Args:
+            measurements: Sensor measurements [m].
+
+        """
+        new_particles, average_likelihood = cpp_module.resample(
+            self._particles.tolist(),
+            list(measurements),
+            self._map._map_segments,
+            self._num_rays,
+            self._sensor_range_max,
+            self._sensor_range_min,
+            self._sigma_z,
+            self._particle_count,
+        )
+
+        self._particles = np.array(new_particles)
+        self.average_likelihood = average_likelihood
+
+        if self._logger:
+            self._logger.warning(f"AVG WEIGHT {self.average_likelihood} ")
 
 
 
