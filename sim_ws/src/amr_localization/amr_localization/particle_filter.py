@@ -11,7 +11,13 @@ from matplotlib import pyplot as plt
 from sklearn.cluster import DBSCAN
 
 
-# peso de cada prtiucla + localiacion de la particula y el robot.
+# import the c++ module
+import sys
+sys.path.append("/workspaces/robots_lab/sim_ws/src/cpp_module/build")
+
+import cpp_module
+
+
 class ParticleFilter:
     """Particle filter implementation."""
 
@@ -462,8 +468,8 @@ class ParticleFilter:
     # sense that implements the c++ version
     def _sense_cpp(self, pose):
         return cpp_module.sense(
-            pose,
-            self._map.segments,
+            pose.tolist(),
+            self._map._map_segments,
             self._num_rays,
             self._sensor_range_max
         )
