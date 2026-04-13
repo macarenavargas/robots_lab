@@ -89,7 +89,7 @@ class ParticleFilter:
         )
 
         # adding feature -> use C++ or not 
-        self._use_cpp = True 
+        self._use_cpp = True  
 
     def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
         """Computes the pose estimate when the particles form a single DBSCAN cluster.
