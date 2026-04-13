@@ -64,8 +64,6 @@ class ParticleFilter:
         self._num_rays = 8  # 8
         # self._localized = False
 
-        self.average_likelihood = 0
-
         self._map = Map(
             map_path,
             sensor_range_max,
@@ -136,13 +134,7 @@ class ParticleFilter:
                 th_hat = float(math.atan2(np.sin(th_p[mask]).mean(), np.cos(th_p[mask]).mean()))
                 pose = (x_hat, y_hat, th_hat)
                 self._particle_count = 50
-                # if self._logger:
-                #     self._logger.warning(
-                #         f"LOCALIZED | x: {x_hat:.2f}m, y: {y_hat:.2f}m, th: {math.degrees(th_hat):.1f}º | Particles reduced to 50."
-                #     )
-                #     self._logger.warning(
-                #         f" AVERAGE LIKELIHOOD WHEN LOCALIZED: {self.average_likelihood}"
-                #     )
+
                 localized = True
             else:
                 # means that some particles have been grouped by chance, but in reality most of the particles are diseprsed
@@ -166,6 +158,68 @@ class ParticleFilter:
                 )
 
         return localized, pose
+
+    def check_likelihood(
+        self,
+        pose: tuple[float, float, float],
+        measurements: list[float],
+        expected_likelihood: float = 1.5,
+    ) -> bool:
+        """
+        Detecta falsa convergencia o secuestro midiendo la discrepancia
+        de la verosimilitud media, tal y como indica el enunciado.
+
+        Args:
+            pose: Pose estimada a evaluar.
+            measurements: Lecturas reales del LiDAR.
+            expected_likelihood: Verosimilitud media que se obtiene cuando el robot converge bien (A calibrar empíricamente).
+            tolerance: Porcentaje de caída permitido antes de considerar que hay "demasiada discrepancia" (ej. 0.5 = 50%).
+        """
+
+        if math.isinf(pose[0]):
+            return False
+
+        # 1. Extraemos las medidas reales
+        z_real = self._extract_robust_measurements(measurements)
+
+        # 2. Simulamos las medidas que DEBERÍA tener esa pose según el mapa
+        z_simulated = self._sense(pose)
+        z_simulated = np.nan_to_num(z_simulated, nan=self._sensor_range_min)
+
+        # 3. Calculamos la VEROSIMILITUD MEDIA de las medidas de los sensores
+        total_likelihood = 0.0
+        for i in range(self._num_rays):
+            total_likelihood += self._gaussian(z_simulated[i], self._sigma_z, z_real[i])
+
+        average_likelihood = total_likelihood / self._num_rays
+
+        if self._logger:
+            self._logger.info(
+                f"Verosimilitud media: {average_likelihood:.2f} | Referencia: {expected_likelihood:.2f}"
+            )
+
+        # 4. Comprobamos 
+        if average_likelihood < (expected_likelihood):
+            if self._logger:
+                self._logger.error(
+                    f" ROBOT ESTÁ PERDIDO"
+                    f"({average_likelihood:.2f} es inferior a {expected_likelihood:.2f}). "
+                    f"La solución consiste en reiniciar el filtro..."
+                )
+
+            # 5. La solución: reiniciar el filtro por completo
+            self._particles = self._init_particles(
+                self._initial_particle_count,
+                global_localization=True,
+                initial_pose=(0.0, 0.0, 0.0),
+                initial_pose_sigma=(0.0, 0.0, 0.0),
+            )
+            self._particle_count = self._initial_particle_count
+
+            return False
+
+        # La pose es válida
+        return True
 
     def move(self, v: float, w: float) -> None:
         """Performs a motion update on the particles.
@@ -240,10 +294,6 @@ class ParticleFilter:
         else:
             # safety preacaution: If every particle has 0 probability -> asign uniform weights
             weights = np.ones(len(self._particles)) / len(self._particles)
-
-        self.average_likelihood = weight_sum / len(self._particles)
-        if self._logger:
-            self._logger.warning(f"AVG WEIGHT {self.average_likelihood} ")
 
         # STEP 5: apply sistematic resampling
         N = self._particle_count  # get current particle count ( updated by dbscan )

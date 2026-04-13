@@ -181,7 +181,7 @@ class ParticleFilterNode(LifecycleNode):
         self._publisher_motion_control.publish(motion_msg)
 
         # b) MOVEMENT: execute as many motion steps as measurementes acumulated in odometry
-        self._logger.info("moving particles")
+        # self._logger.info("moving particles")
         # self._logger.info(f"ODOEMTRY UPDATES: {self._odom_measurements}")
         if len(self._odom_measurements) > 0:
             for z_v, z_w in self._odom_measurements:
@@ -190,11 +190,11 @@ class ParticleFilterNode(LifecycleNode):
         self._odom_measurements.clear()
 
         # c) MEASUREMENT: execute one single correction phase
-        self._logger.info("sensing particles")
+        # self._logger.info("sensing particles")
         x_h, y_h, theta_h = self._execute_measurement_step(self._last_z_scan)
-        if self._localized : 
-            self._x_pred = x_h 
-            self._y_pred = y_h 
+        if self._localized:
+            self._x_pred = x_h
+            self._y_pred = y_h
             self._theta_pred = theta_h
 
         # d) START THE ROBOT: publish the motion control message again to tell the robot to move
@@ -209,6 +209,7 @@ class ParticleFilterNode(LifecycleNode):
         self._timer.reset()
 
     def _scan_callback(self, scan_msg: LaserScan):
+
         self._last_z_scan = scan_msg.ranges
 
     def _odometry_callback(self, odom_msg: Odometry):
@@ -218,24 +219,23 @@ class ParticleFilterNode(LifecycleNode):
             noise_threshold = 1e-3
             if abs(z_v) > noise_threshold or abs(z_w) > noise_threshold:
                 self._odom_measurements.append((z_v, z_w))
-            
-        else: 
+
+        else:
             # probar estos valores
-            noise_threshold_v = 0.01 # 0.1
+            noise_threshold_v = 0.01  # 0.1
             noise_threshold_w = 0.1
 
             if abs(z_v) > noise_threshold_v or abs(z_w) > noise_threshold_w:
                 self._odom_measurements.append((z_v, z_w))
-            # lab 4 -> make a prediction with Euler 
+            # lab 4 -> make a prediction with Euler
             dt = self.get_parameter("dt").value
-        
+
             self._x_pred += z_v * math.cos(self._theta_pred) * dt
             self._y_pred += z_v * math.sin(self._theta_pred) * dt
             self._theta_pred += z_w * dt
             self._theta_pred %= 2 * math.pi
 
             self._publish_pose_estimate(self._x_pred, self._y_pred, self._theta_pred)
-        
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
         """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
@@ -274,7 +274,7 @@ class ParticleFilterNode(LifecycleNode):
             self._particle_filter.resample(z_scan)
             sense_time = time.perf_counter() - start_time
 
-            self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
+            # self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
 
             if self._enable_plot:
                 self._particle_filter.show("Sense", save_figure=True)
@@ -284,7 +284,6 @@ class ParticleFilterNode(LifecycleNode):
             clustering_time = time.perf_counter() - start_time
 
             # self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
-
         return pose
 
     def _execute_motion_step(self, z_v: float, z_w: float):
@@ -298,7 +297,7 @@ class ParticleFilterNode(LifecycleNode):
         self._particle_filter.move(z_v, z_w)
         move_time = time.perf_counter() - start_time
 
-        self.get_logger().info(f"Move step time: {move_time:7.3f} s")
+        # self.get_logger().info(f"Move step time: {move_time:7.3f} s")
 
         if self._enable_plot:
             self._particle_filter.show("Move", save_figure=True)
@@ -330,11 +329,6 @@ class ParticleFilterNode(LifecycleNode):
             msg.pose.orientation.y = qy
             msg.pose.orientation.z = qz
             msg.pose.orientation.w = qw
-
-            # self.get_logger().info(
-            #     f"[PF] localized={self._localized} | x={x_h:.2f}, y={y_h:.2f}, theta={theta_h:.2f}"
-            # )
-   
 
         self._publisher_pose.publish(msg)
 
