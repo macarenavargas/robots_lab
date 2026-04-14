@@ -4,13 +4,20 @@ import numpy as np
 import os
 import pytz
 import random
+import time 
 
 from amr_localization.maps import Map
 from matplotlib import pyplot as plt
 from sklearn.cluster import DBSCAN
 
 
-# peso de cada prtiucla + localiacion de la particula y el robot.
+# import the c++ module
+import sys
+sys.path.append("/workspaces/robots_lab/sim_ws/install/amr_cpp/lib")
+
+import cpp_module
+
+
 class ParticleFilter:
     """Particle filter implementation."""
 
@@ -78,6 +85,9 @@ class ParticleFilter:
         self._timestamp = datetime.datetime.now(pytz.timezone("Europe/Madrid")).strftime(
             "%Y-%m-%d_%H-%M-%S"
         )
+
+        # adding feature -> use C++ or not 
+        self._use_cpp = True  
 
     def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
         """Computes the pose estimate when the particles form a single DBSCAN cluster.
@@ -230,7 +240,7 @@ class ParticleFilter:
 
         """
         self._iteration += 1
-
+        start = time.time() 
         # TODO: 3.5. Complete the function body with your code.
 
         n_particles = len(self._particles)
@@ -270,15 +280,30 @@ class ParticleFilter:
         self._particles[:, 1] = y_new
         self._particles[:, 2] = theta_new
 
+
+        print("MOVING TIME :", time.time() - start)
+
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
+
+        Dispatches to the C++ or Python implementation depending on self._use_cpp.
 
         Args:
             measurements: Sensor measurements [m].
 
         """
-        # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
+        if self._use_cpp:
+            self._resample_cpp(measurements)
+        else:
+            self._resample_python(measurements)
 
+    def _resample_python(self, measurements: list[float]) -> None:
+        """Python implementation of the resample step.
+
+        Args:
+            measurements: Sensor measurements [m].
+
+        """
         # STEP 1: extract the 8 lidar values and clean them.
         z_real = self._extract_robust_measurements(measurements)
 
@@ -309,6 +334,36 @@ class ParticleFilter:
 
         # STEP 6: update the aprticle array with the surviving particles.
         self._particles = self._particles[indices]
+
+    def _resample_cpp(self, measurements: list[float]) -> None:
+        """C++ implementation of the resample step.
+
+        Calls cpp_module.resample(), which runs steps 1-6 entirely in C++:
+        extract measurements → compute weights (sense + Gaussian) →
+        normalize → systematic resampling → return new particles.
+
+        Args:
+            measurements: Sensor measurements [m].
+
+        """
+        new_particles, average_likelihood = cpp_module.resample(
+            self._particles.tolist(),
+            list(measurements),
+            self._map._map_segments,
+            self._num_rays,
+            self._sensor_range_max,
+            self._sensor_range_min,
+            self._sigma_z,
+            self._particle_count,
+        )
+
+        self._particles = np.array(new_particles)
+        self.average_likelihood = average_likelihood
+
+        if self._logger:
+            self._logger.warning(f"AVG WEIGHT {self.average_likelihood} ")
+
+
 
     def _extract_robust_measurements(
         self, measurements: list[float], window_size: int = 3
@@ -465,7 +520,9 @@ class ParticleFilter:
 
         return particles
 
-    def _sense(self, pose: tuple[float, float, float]) -> list[float]:
+    # this is the _sense function from before. 
+    # if C++ doesnt work, use this as _sense. 
+    def _sense_python(self, pose: tuple[float, float, float]) -> list[float]:
         """Obtains the predicted measurement of every LiDAR ray given the robot's pose.
 
         Args:
@@ -474,7 +531,7 @@ class ParticleFilter:
         Returns: List of predicted measurements; nan if a sensor is out of range.
 
         """
-
+    
         z_hat: list[float] = []
 
         # TODO: 3.6. Complete the missing function body with your code.
@@ -492,8 +549,29 @@ class ParticleFilter:
                 z_hat.append(float("nan"))
             else:
                 z_hat.append(distance)
+       
         return z_hat
+    
 
+
+    # sense that implements the c++ version
+    def _sense_cpp(self, pose):
+        return cpp_module.sense(
+            pose.tolist(),
+            self._map._map_segments,
+            self._num_rays,
+            self._sensor_range_max
+        )
+
+    def _sense(self, pose:tuple[float, float, float])-> list[float]: 
+        
+        if self._use_cpp: # if we want to use C++
+            return self._sense_cpp(pose)
+        else: # if we want to use Python 
+            return self._sense_python(pose)
+
+  
+  
     @staticmethod
     def _gaussian(mu: float, sigma: float, x: float) -> float:
         """Computes the value of a Gaussian.
@@ -570,7 +648,9 @@ class ParticleFilter:
         # TODO: 3.8. Complete the missing function body with your code.
 
         # take the particles ray measurements
+        start = time.time()
         particle_measurements = self._sense(particle)
+        print("SENSING TIME :", time.time() - start)
 
         particle_measurements = np.nan_to_num(particle_measurements, nan=self._sensor_range_min)
 

@@ -74,7 +74,13 @@ class Map:
         self._sensor_range = sensor_range
         self._intersect = self._init_intersect() if compiled_intersect else None
         self._region_segments = self._init_regions() if use_regions else None
-
+    
+    
+    
+    @property
+    # add a propierty to use for the Sense function of C++ 
+    def segments(self):
+        return self._map_segments
     def bounds(self) -> tuple[float, float, float, float]:
         """Coordinates of a bounding box that contains the map.
 
