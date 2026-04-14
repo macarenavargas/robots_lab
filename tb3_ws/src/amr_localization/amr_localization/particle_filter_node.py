@@ -80,7 +80,9 @@ class ParticleFilterNode(LifecycleNode):
             self._last_z_scan = None
             self._odom_measurements = []
 
-            self._timer_period = 5
+            self._timer_period = 2
+
+            self._waiting_to_update = False
 
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
@@ -175,38 +177,14 @@ class ParticleFilterNode(LifecycleNode):
 
         if self._last_z_scan is None:
             return
+
+        self._waiting_to_update = True
         # a) STOP THE ROBOT: publish the motionControl message to indicate the robot that it needs to stop
         motion_msg = MotionControl()
         motion_msg.allow_motion = False
         self._publisher_motion_control.publish(motion_msg)
 
-        # b) MOVEMENT: execute as many motion steps as measurementes acumulated in odometry
-        self._logger.info("moving particles")
-        # self._logger.info(f"ODOEMTRY UPDATES: {self._odom_measurements}")
-        if len(self._odom_measurements) > 0:
-            for z_v, z_w in self._odom_measurements:
-                self._execute_motion_step(z_v, z_w)
-
-        self._odom_measurements.clear()
-
-        # c) MEASUREMENT: execute one single correction phase
-        self._logger.info("sensing particles")
-        x_h, y_h, theta_h = self._execute_measurement_step(self._last_z_scan)
-        if self._localized : 
-            self._x_pred = x_h 
-            self._y_pred = y_h 
-            self._theta_pred = theta_h
-
-        # d) START THE ROBOT: publish the motion control message again to tell the robot to move
-        motion_msg2 = MotionControl()
-        motion_msg2.allow_motion = True
-        self._publisher_motion_control.publish(motion_msg2)
-
-        # e) PUBLISH POSE: publish the estimated pose
-        self._publish_pose_estimate(x_h, y_h, theta_h)
-
-        # RESTART THE TIMER: so that the robot moves the whole timer period
-        self._timer.reset()
+        
 
     def _scan_callback(self, scan_msg: LaserScan):
     #     self.get_logger().info(
@@ -226,21 +204,54 @@ class ParticleFilterNode(LifecycleNode):
                 self._odom_measurements.append((z_v, z_w))
             
         else: 
-            # probar estos valores
-            noise_threshold_v = 0.01 # 0.1
-            noise_threshold_w = 0.1
 
-            if abs(z_v) > noise_threshold_v or abs(z_w) > noise_threshold_w:
-                self._odom_measurements.append((z_v, z_w))
-            # lab 4 -> make a prediction with Euler 
-            dt = self.get_parameter("dt").value
-        
-            self._x_pred += z_v * math.cos(self._theta_pred) * dt
-            self._y_pred += z_v * math.sin(self._theta_pred) * dt
-            self._theta_pred += z_w * dt
-            self._theta_pred %= 2 * math.pi
+            if self._waiting_to_update and abs(z_v) < 0.01 and abs(z_w) < 0.05:
+                self._waiting_to_update = False
 
-            self._publish_pose_estimate(self._x_pred, self._y_pred, self._theta_pred)
+                # b) MOVEMENT: execute as many motion steps as measurementes acumulated in odometry
+                self._logger.info("moving particles")
+                # self._logger.info(f"ODOEMTRY UPDATES: {self._odom_measurements}")
+                if len(self._odom_measurements) > 0:
+                    for z_v, z_w in self._odom_measurements:
+                        self._execute_motion_step(z_v, z_w)
+
+                self._odom_measurements.clear()
+
+                # c) MEASUREMENT: execute one single correction phase
+                self._logger.info("sensing particles")
+                x_h, y_h, theta_h = self._execute_measurement_step(self._last_z_scan)
+                if self._localized : 
+                    self._x_pred = x_h 
+                    self._y_pred = y_h 
+                    self._theta_pred = theta_h
+
+                # d) START THE ROBOT: publish the motion control message again to tell the robot to move
+                motion_msg2 = MotionControl()
+                motion_msg2.allow_motion = True
+                self._publisher_motion_control.publish(motion_msg2)
+
+                # e) PUBLISH POSE: publish the estimated pose
+                self._publish_pose_estimate(x_h, y_h, theta_h)
+
+                # RESTART THE TIMER: so that the robot moves the whole timer period
+                self._timer.reset()
+
+            else:
+                # probar estos valores
+                noise_threshold_v = 0.01 # 0.1
+                noise_threshold_w = 0.1
+
+                if abs(z_v) > noise_threshold_v or abs(z_w) > noise_threshold_w:
+                    self._odom_measurements.append((z_v, z_w))
+                # lab 4 -> make a prediction with Euler 
+                dt = self.get_parameter("dt").value
+            
+                self._x_pred += z_v * math.cos(self._theta_pred) * dt
+                self._y_pred += z_v * math.sin(self._theta_pred) * dt
+                self._theta_pred += z_w * dt
+                self._theta_pred %= 2 * math.pi
+
+                self._publish_pose_estimate(self._x_pred, self._y_pred, self._theta_pred)
         
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):

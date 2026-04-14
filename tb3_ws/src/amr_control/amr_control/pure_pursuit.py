@@ -71,7 +71,7 @@ class PurePursuit:
         # check if alpha is too high
         if abs(alpha) > self._alpha_threshold:
             v = 0.0 
-            w = - 0.2 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
+            w = - 0.4 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
             
             if self._logger: 
                 self._logger.info(f" LARGE ALPHA !! alpha={alpha:.2f}, setting v=0 and w={w:.2f}")
