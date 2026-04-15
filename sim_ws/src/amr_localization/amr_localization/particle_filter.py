@@ -173,7 +173,7 @@ class ParticleFilter:
         self,
         pose: tuple[float, float, float],
         measurements: list[float],
-        expected_likelihood: float = 1.5,
+        error_threshold: float = 0.2,
     ) -> bool:
         """
         Detects false convergence or captured robot measuring the discrepancy 
@@ -197,11 +197,15 @@ class ParticleFilter:
         z_simulated = np.nan_to_num(z_simulated, nan=self._sensor_range_min)
 
         # 3. Mean likelihood of the sensor measurements
-        total_likelihood = 0.0
-        for i in range(self._num_rays):
-            total_likelihood += self._gaussian(z_simulated[i], self._sigma_z, z_real[i])
+        errors = []
 
-        average_likelihood = total_likelihood / self._num_rays
+        for i in range(self._num_rays):
+            errors.append(abs(z_real[i] - z_simulated[i]))
+
+        mean_error = np.mean(errors)
+
+        if self._logger:
+            self._logger.info(f"Mean error: {mean_error:.3f}")
 
         # if self._logger:
         #     self._logger.info(
@@ -210,11 +214,11 @@ class ParticleFilter:
 
         # 4. Check if the average likelihood is significantly lower than the expected one, 
         # which could indicate that the robot is lost or has been captured by a wrong cluster.
-        if average_likelihood < (expected_likelihood):
+        if mean_error > error_threshold:
             if self._logger:
                 self._logger.error(
                     f"  THE ROBOT IS LOST "
-                    f"({average_likelihood:.2f} is inferior to {expected_likelihood:.2f}). "
+                    f"({mean_error:.2f} is inferior to {error_threshold:.2f}). "
                     f"Reloading the particle filter . . ."
                 )
 
@@ -235,8 +239,8 @@ class ParticleFilter:
             if self._logger:
                 self._logger.error(
                     f"  THE ROBOT IS WELL LOCALIZED  "
-                    f"({average_likelihood:.2f} is superior to the expected {expected_likelihood:.2f}). "
-                    
+                    f"({mean_error:.2f} is superior to the expected {error_threshold:.2f}). "
+
                 )
 
         return True
