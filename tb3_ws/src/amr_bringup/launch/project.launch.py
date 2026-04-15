@@ -5,7 +5,14 @@ from launch_ros.actions import LifecycleNode, Node
 def generate_launch_description():
     simulation = False
     world = "project"
-    goal = (-0.6, 1.0)
+
+    a = (-1.0, -1.0)
+    d = (1.0, 1.0)
+    e = (-0.6, 1.0)
+    c = (1.0, -1.0)
+    b = (0.2, -0.6)
+    f = (-1, 0.6)
+    goal = f
 
     particle_filter_node = LifecycleNode(
         package="amr_localization",
@@ -21,7 +28,7 @@ def generate_launch_description():
                 "particles": 3000, # 3000
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
-                "sigma_z": 0.2,
+                "sigma_z": 0.1, # originalmente 0.2 , lo bajamos por que  nos estbamaos fiando demsaiado poco de los sensores?
                 "simulation": simulation,
                 "world": world,
             }

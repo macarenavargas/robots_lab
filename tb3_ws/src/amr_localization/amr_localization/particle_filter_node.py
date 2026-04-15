@@ -80,7 +80,7 @@ class ParticleFilterNode(LifecycleNode):
             self._last_z_scan = None
             self._odom_measurements = []
 
-            self._timer_period = 2
+            self._timer_period = 4
 
             self._waiting_to_update = False
 
@@ -205,7 +205,10 @@ class ParticleFilterNode(LifecycleNode):
             
         else: 
 
-            if self._waiting_to_update and abs(z_v) < 0.01 and abs(z_w) < 0.05:
+            if self._waiting_to_update:
+                self._logger.info("waiting")
+
+            if self._waiting_to_update and abs(z_v) < 0.05 and abs(z_w) < 0.1:
                 self._waiting_to_update = False
 
                 # b) MOVEMENT: execute as many motion steps as measurementes acumulated in odometry
