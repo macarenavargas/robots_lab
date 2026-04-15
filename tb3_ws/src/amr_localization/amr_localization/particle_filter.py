@@ -234,22 +234,28 @@ class ParticleFilter:
     def move(self, v: float, w: float) -> None:
         """Performs a motion update on the particles.
 
+        Dispatches to the C++ or Python implementation depending on self._use_cpp.
+
         Args:
             v: Linear velocity [m].
             w: Angular velocity [rad/s].
 
         """
-        self._iteration += 1
-        start = time.time() 
-        # TODO: 3.5. Complete the function body with your code.
+        if self._use_cpp:
+            self._move_cpp(v, w)
+        else:
+            self._move_python(v, w)
 
+    def _move_python(self, v: float, w: float) -> None:
+        """Python implementation of the motion update."""
+        self._iteration += 1
+        start = time.time()
+        
         n_particles = len(self._particles)
 
         # Calcualte gaussian noise for all particles
         v_gauss = v + np.random.normal(0, self._sigma_v, n_particles)
         w_gauss = w + np.random.normal(0, self._sigma_w, n_particles)
-
-        # self._logger.info(f"move the particle {v,w}")
 
         # extract value arrays
         x_prev = self._particles[:, 0]
@@ -280,7 +286,22 @@ class ParticleFilter:
         self._particles[:, 1] = y_new
         self._particles[:, 2] = theta_new
 
+        print("MOVING TIME :", time.time() - start)
 
+    def _move_cpp(self, v: float, w: float) -> None:
+        """C++ implementation of the motion update."""
+        self._iteration += 1
+        start = time.time()
+        
+        new_particles = cpp_module.move(
+            self._particles.tolist(),
+            v, w, self._dt,
+            self._sigma_v, self._sigma_w,
+            self._simulation,
+            self._map._map_segments
+        )
+        
+        self._particles = np.array(new_particles)
         print("MOVING TIME :", time.time() - start)
 
     def resample(self, measurements: list[float]) -> None:
@@ -358,12 +379,7 @@ class ParticleFilter:
         )
 
         self._particles = np.array(new_particles)
-        self.average_likelihood = average_likelihood
-
-        if self._logger:
-            self._logger.warning(f"AVG WEIGHT {self.average_likelihood} ")
-
-
+        
 
     def _extract_robust_measurements(
         self, measurements: list[float], window_size: int = 3
