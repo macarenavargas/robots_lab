@@ -35,10 +35,7 @@ nanobind_add_module(cpp_module
   src/bindings.cpp
   src/sense.cpp
   src/resample.cpp
-<<<<<<< HEAD
-=======
   src/move.cpp
->>>>>>> ea26081e61f009ff04d148b6f6121aab673d0807
 )
 
 install(TARGETS cpp_module
