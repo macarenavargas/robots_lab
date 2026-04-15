@@ -13,7 +13,20 @@ from sklearn.cluster import DBSCAN
 
 # import the c++ module
 import sys
-sys.path.append("/workspaces/robots_lab/sim_ws/install/amr_cpp/lib")
+import os
+
+# Updated path to match the robot's actual file system
+robot_cpp_path = "/home/turtlebot/robots_lab/tb3_ws/install/amr_cpp/lib"
+
+if os.path.exists(robot_cpp_path):
+    sys.path.append(robot_cpp_path)
+
+try:
+    import cpp_module
+    CPP_AVAILABLE = True
+except ImportError as e:
+    print(f"CRITICAL: Could not import cpp_module from {robot_cpp_path}. Error: {e}")
+    CPP_AVAILABLE = False
 
 import cpp_module
 
@@ -69,6 +82,7 @@ class ParticleFilter:
         self._simulation: bool = simulation
         self._iteration: int = 0
         self._num_rays = 8  # 8
+        self._prev_raw_measurements = None
         # self._localized = False
 
         self._map = Map(
@@ -387,7 +401,8 @@ class ParticleFilter:
         """Extracts and cleans LiDAR measurements.
 
         Extrae exactamente 'self._num_rays' y sustituye los valores
-        inválidos (NaN, Inf) por el rango mínimo del sensor.
+        inválidos (NaN, Inf) por el de la iteración anterior si era válido,
+        y sino por el rango mínimo del sensor.
         """
         n_real = len(measurements)
         # STEP 1: safety precaution in case the lidar doesnt send anything
@@ -399,14 +414,26 @@ class ParticleFilter:
 
         # STEP 3: initializy empty array for extracted rays
         extracted = np.empty(self._num_rays, dtype=float)
+        current_raw = []
 
-        # STEP 4: extract each ray and substitute for the minimum
+        # STEP 4: extract each ray and substitute for the minimum or previous
         for i, idx in enumerate(idxs):
             val = measurements[idx]
+            current_raw.append(val)
+            
             if math.isnan(val) or math.isinf(val) or val <= 0.0:
-                extracted[i] = self._sensor_range_min
+                if self._prev_raw_measurements is not None:
+                    prev_val = self._prev_raw_measurements[i]
+                    if math.isnan(prev_val) or math.isinf(prev_val) or prev_val <= 0.0:
+                        extracted[i] = self._sensor_range_min
+                    else:
+                        extracted[i] = prev_val
+                else:
+                    extracted[i] = self._sensor_range_min
             else:
                 extracted[i] = val
+
+        self._prev_raw_measurements = current_raw
 
         return extracted
 
