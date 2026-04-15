@@ -7,9 +7,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 
-set(Python_EXECUTABLE /usr/bin/python3)
-set(Python_INCLUDE_DIR /usr/include/python3.10)
-set(Python_LIBRARY /usr/lib/x86_64-linux-gnu/libpython3.10.so)
+
 
 find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development)
 
