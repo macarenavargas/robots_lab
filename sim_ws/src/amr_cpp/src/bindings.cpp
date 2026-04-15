@@ -23,8 +23,6 @@ std::pair<std::vector<std::vector<double>>, double> resample_cpp(
     double sigma_z,
     int    particle_count);
 
-<<<<<<< HEAD
-=======
 // ── Declared in move.cpp ──────────────────────────────────────────────────────
 std::vector<std::vector<double>> move_cpp(
     const std::vector<std::vector<double>>& particles,
@@ -36,7 +34,6 @@ std::vector<std::vector<double>> move_cpp(
     bool simulation,
     const std::vector<std::vector<std::vector<double>>>& map_segments);
 
->>>>>>> ea26081e61f009ff04d148b6f6121aab673d0807
 NB_MODULE(cpp_module, m) {
     m.def("sense", &sense_cpp,
           nb::arg("pose"),
@@ -53,8 +50,6 @@ NB_MODULE(cpp_module, m) {
           nb::arg("sensor_range_min"),
           nb::arg("sigma_z"),
           nb::arg("particle_count"));
-<<<<<<< HEAD
-=======
 
     m.def("move", &move_cpp,
           nb::arg("particles"),
@@ -65,5 +60,4 @@ NB_MODULE(cpp_module, m) {
           nb::arg("sigma_w"),
           nb::arg("simulation"),
           nb::arg("map_segments"));
->>>>>>> ea26081e61f009ff04d148b6f6121aab673d0807
 }

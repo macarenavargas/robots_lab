@@ -82,6 +82,9 @@ class ParticleFilterNode(LifecycleNode):
 
             self._timer_period = 5
 
+            # to reload the filter only if it was already localized 
+            self._was_localized = False
+
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
             )
@@ -270,20 +273,32 @@ class ParticleFilterNode(LifecycleNode):
         pose = (float("inf"), float("inf"), float("inf"))
 
         if self._localized or not self._steps % self._steps_btw_sense_updates:
+
+            # 1 . Resample (correction)
             start_time = time.perf_counter()
             self._particle_filter.resample(z_scan)
             sense_time = time.perf_counter() - start_time
 
-            # self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
+            self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
 
+            # 2. Estimate pose
             if self._enable_plot:
                 self._particle_filter.show("Sense", save_figure=True)
 
             start_time = time.perf_counter()
             self._localized, pose = self._particle_filter.compute_pose()
             clustering_time = time.perf_counter() - start_time
+            self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
 
-            # self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
+            # 3. CHECK IF THE POSE IS CORRECT ! 
+            if self._localized and not self._was_localized:
+                correct_pose = self._particle_filter.check_likelihood(pose, z_scan)
+
+                if not correct_pose:
+                    self._localized = False
+                        
+            self._was_localized = self._localized 
+            
         return pose
 
     def _execute_motion_step(self, z_v: float, z_w: float):
@@ -293,9 +308,9 @@ class ParticleFilterNode(LifecycleNode):
             z_v: Odometric estimate of the linear velocity of the robot center [m/s].
             z_w: Odometric estimate of the angular velocity of the robot center [rad/s].
         """
-        start_time = time.perf_counter()
+        #start_time = time.perf_counter()
         self._particle_filter.move(z_v, z_w)
-        move_time = time.perf_counter() - start_time
+        #move_time = time.perf_counter() - start_time
 
         # self.get_logger().info(f"Move step time: {move_time:7.3f} s")
 
