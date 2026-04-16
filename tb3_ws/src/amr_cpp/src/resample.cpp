@@ -17,6 +17,7 @@
 #include <cmath>
 #include <random>
 #include <vector>
+#include <tuple>
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Forward declaration — implemented in sense.cpp
@@ -50,26 +51,44 @@ static double gaussian(double mu, double sigma, double x)
  *  - Selects num_rays equally-spaced indices via linspace(0, n-1, num_rays, dtype=int).
  *  - Replaces NaN / Inf / non-positive values with sensor_range_min.
  */
-static std::vector<double> extract_robust_measurements(
+static std::pair<std::vector<double>, std::vector<double>> extract_robust_measurements(
     const std::vector<double>& measurements,
+    const std::vector<double>& prev_raw_measurements,
     int    num_rays,
     double sensor_range_min)
 {
     int n = static_cast<int>(measurements.size());
 
-    if (n == 0)
-        return std::vector<double>(num_rays, sensor_range_min);
+    if (n == 0) {
+        return {std::vector<double>(num_rays, sensor_range_min),
+                std::vector<double>(num_rays, sensor_range_min)};
+    }
 
     std::vector<double> z_real(num_rays);
+    std::vector<double> current_raw(num_rays);
+
     for (int i = 0; i < num_rays; ++i) {
         // int(np.linspace(0, n-1, num_rays)[i])  → truncating cast, same as numpy dtype=int
         int    idx = (num_rays > 1) ? static_cast<int>((double)(n - 1) * i / (num_rays - 1)) : 0;
         double val = measurements[idx];
-        z_real[i]  = (std::isnan(val) || std::isinf(val) || val <= 0.0)
-                     ? sensor_range_min
-                     : val;
+        current_raw[i] = val;
+
+        if (std::isnan(val) || std::isinf(val) || val <= 0.0) {
+            if (!prev_raw_measurements.empty() && i < prev_raw_measurements.size()) {
+                double prev_val = prev_raw_measurements[i];
+                if (std::isnan(prev_val) || std::isinf(prev_val) || prev_val <= 0.0) {
+                    z_real[i] = sensor_range_min;
+                } else {
+                    z_real[i] = prev_val;
+                }
+            } else {
+                z_real[i] = sensor_range_min;
+            }
+        } else {
+            z_real[i] = val;
+        }
     }
-    return z_real;
+    return {z_real, current_raw};
 }
 
 /**
@@ -126,10 +145,11 @@ static double measurement_probability(
  * @param sigma_z           Measurement noise std deviation
  * @param particle_count    Target number of particles after resampling
  *                          (can differ from N when DBSCAN adapts it, e.g. 50)
+ * @param prev_raw_measurements Previous raw LiDAR measurements to serve as fallback
  *
- * @return { new_particles (M×3), average_likelihood }
+ * @return { new_particles (M×3), average_likelihood, current_raw_measurements (1x8) }
  */
-std::pair<std::vector<std::vector<double>>, double> resample_cpp(
+std::tuple<std::vector<std::vector<double>>, double, std::vector<double>> resample_cpp(
     const std::vector<std::vector<double>>& particles,
     const std::vector<double>& measurements,
     const std::vector<std::vector<std::vector<double>>>& map_segments,
@@ -137,13 +157,15 @@ std::pair<std::vector<std::vector<double>>, double> resample_cpp(
     double sensor_range_max,
     double sensor_range_min,
     double sigma_z,
-    int    particle_count)
+    int    particle_count,
+    const std::vector<double>& prev_raw_measurements)
 {
     int N = static_cast<int>(particles.size());
 
     // ── STEP 1: extract robust measurements ─────────────────────────────────
-    std::vector<double> z_real =
-        extract_robust_measurements(measurements, num_rays, sensor_range_min);
+    auto robust_res = extract_robust_measurements(measurements, prev_raw_measurements, num_rays, sensor_range_min);
+    std::vector<double> z_real = robust_res.first;
+    std::vector<double> current_raw = robust_res.second;
 
     // ── STEP 2: compute weight for every particle ────────────────────────────
     std::vector<double> weights(N);
@@ -193,5 +215,5 @@ std::pair<std::vector<std::vector<double>>, double> resample_cpp(
     }
 
     // ── STEP 6: return ───────────────────────────────────────────────────────
-    return {new_particles, average_likelihood};
+    return {new_particles, average_likelihood, current_raw};
 }

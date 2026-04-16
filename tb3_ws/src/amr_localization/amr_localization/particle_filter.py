@@ -381,7 +381,9 @@ class ParticleFilter:
             measurements: Sensor measurements [m].
 
         """
-        new_particles, average_likelihood = cpp_module.resample(
+        prev_raw = self._prev_raw_measurements if self._prev_raw_measurements is not None else []
+
+        new_particles, average_likelihood, current_raw = cpp_module.resample(
             self._particles.tolist(),
             list(measurements),
             self._map._map_segments,
@@ -390,9 +392,11 @@ class ParticleFilter:
             self._sensor_range_min,
             self._sigma_z,
             self._particle_count,
+            prev_raw
         )
 
         self._particles = np.array(new_particles)
+        self._prev_raw_measurements = current_raw
         
 
     def _extract_robust_measurements(
