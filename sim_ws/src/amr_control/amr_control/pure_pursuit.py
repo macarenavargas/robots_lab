@@ -72,8 +72,8 @@ class PurePursuit:
         else: 
             alpha = math.atan2(math.sin(alpha), math.cos(alpha))
 
-        if self._logger:
-            self._logger.info(f"PURE PERSUIT:lookeahead distance = {self._lookahead_distance:.2f}, target point = {target_xy}, alpha = {alpha:.2f} rad")
+        # if self._logger:
+        #     self._logger.info(f"PURE PERSUIT:lookeahead distance = {self._lookahead_distance:.2f}, target point = {target_xy}, alpha = {alpha:.2f} rad")
              
         
         # check if alpha is too high
@@ -81,8 +81,8 @@ class PurePursuit:
             v = 0.0 
             w = - 0.2 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
             
-            if self._logger: 
-                self._logger.info(f" LARGE ALPHA !! alpha={alpha:.2f}, setting v=0 and w={w:.2f}")
+            # if self._logger: 
+            #     self._logger.info(f" LARGE ALPHA !! alpha={alpha:.2f}, setting v=0 and w={w:.2f}")
             return v, w
         
         else: 
@@ -97,8 +97,8 @@ class PurePursuit:
             # if abs(w)> 0.3: 
             #     v = 0.1
             
-            if self._logger:
-                self._logger.info(f"PURE PERSUIT: v = {v:+.3f} m/s, w = {w:+.3f} rad/s, {alpha:.2f} rad")
+            # if self._logger:
+            #     self._logger.info(f"PURE PERSUIT: v = {v:+.3f} m/s, w = {w:+.3f} rad/s, {alpha:.2f} rad")
                         
             return v, w
 
@@ -150,8 +150,8 @@ class PurePursuit:
 
 
         self._last_closest_idx = closest_idx
-        if self._logger:
-            self._logger.info(f"Closest point: {closest_xy} at index {closest_idx} with distance {closest_distance:.2f}")
+        # if self._logger:
+        #     self._logger.info(f"Closest point: {closest_xy} at index {closest_idx} with distance {closest_distance:.2f}")
         return closest_xy, closest_idx
     
 
@@ -183,6 +183,6 @@ class PurePursuit:
             target_xy = self.path[-1] # return goal 
             return target_xy
     
-        if self._logger:
-            self._logger.info(f"Target point: {target_xy} at index {origin_idx}")
+        # if self._logger:
+        #     self._logger.info(f"Target point: {target_xy} at index {origin_idx}")
         return target_xy

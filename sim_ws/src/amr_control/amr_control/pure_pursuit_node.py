@@ -1,7 +1,7 @@
 
 import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 
 from amr_msgs.msg import PoseStamped, MotionControl
 from geometry_msgs.msg import Twist, TwistStamped
@@ -82,9 +82,16 @@ class PurePursuitNode(LifecycleNode):
 
             # subscribe to the laser scan to avoid obstacles 
             self._scan = None 
-            self._subscriber_scan = self.create_subscription(
-                LaserScan, "/scan", self._scan_callback, 10)
+            qos_profile = QoSProfile(
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=10,
+                reliability=QoSReliabilityPolicy.BEST_EFFORT,
+                durability=QoSDurabilityPolicy.VOLATILE,
+                )
             
+            self._subscriber_scan = self.create_subscription(
+                LaserScan, "/scan", self._scan_callback, qos_profile=qos_profile
+            )
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -159,12 +166,16 @@ class PurePursuitNode(LifecycleNode):
                 # IF IT IS NEAR THE OBSTACLE, IGNORE the pure_pursuit commands and
                 # use the "mini_wall_follower" instead 
 
-                if d_front < 0.3:
-                    v = 0.05
+                if d_front < 0.2:
+                    v = 0.0
                     if d_left > d_right:
-                        w =0.4
+                        self.get_logger().info(
+                            "turn left  "         )
+                        w = - 0.4
                     else:
-                        w = -0.4
+                        self.get_logger().info(
+                            "turn right  "         )
+                        w = 0.4
 
                     self.get_logger().info(
                         f"Obstacle ahead: front={d_front:.2f}, left={d_left:.2f}, right={d_right:.2f} -> avoidance"
