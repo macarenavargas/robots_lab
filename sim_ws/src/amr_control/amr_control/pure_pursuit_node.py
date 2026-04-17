@@ -18,6 +18,13 @@ from sensor_msgs.msg import LaserScan
 
 
 class PurePursuitNode(LifecycleNode):
+    # Robot limits
+    LINEAR_SPEED_MAX = 0.22  # Maximum linear velocity in the abscence of angular velocity [m/s]
+    SENSOR_RANGE_MIN = 0.16  # Minimum LiDAR sensor range [m]
+    SENSOR_RANGE_MAX = 8.0  # Maximum LiDAR sensor range [m]
+    TRACK = 0.16  # Distance between same axle wheels [m]
+    WHEEL_RADIUS = 0.033  # Radius of the wheels [m]
+    WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS  # Maximum motor angular speed [rad/s]
     def __init__(self):
         """Pure pursuit node initializer."""
         super().__init__("pure_pursuit")
@@ -161,41 +168,45 @@ class PurePursuitNode(LifecycleNode):
 
 
                 # Process lidar similarily to wall follower 
-                clean_scan = self._clean_lidar_data(self._scan)
-                d_front, d_left, d_right = self._get_sensor_readings(clean_scan)
+                # clean_scan = self._clean_lidar_data(self._scan)
+                # d_front, d_left, d_right = self._get_sensor_readings(clean_scan)
 
                 # IF IT IS NEAR THE OBSTACLE, IGNORE the pure_pursuit commands and
                 # use the "mini_wall_follower" instead 
 
-                if d_front < 0.2:
-                    self._turn = True 
-                if self._turn: 
-                    if d_front >  0.4: 
-                        self._turn = False
+                # if d_front < 0.2:
+
+                #     self._turn = True 
+                # if self._turn: 
+                #     if d_front >  0.4 and d_right>0.13  and d_left>0.13: 
+                #         self._turn = False
                     
-                    else : 
+                #     else : 
 
-                        v = 0.0
-                        if d_left > d_right:
-                            self.get_logger().info(
-                                "turn left  "         )
-                            w = - 0.4
-                        else:
-                            self.get_logger().info(
-                                "turn right  "         )
-                            w = 0.4
+                #         v = 0.0
+                #         if d_left > d_right:
+                #             self.get_logger().info(
+                #                 "turn left  "         )
+                #             w = - 0.4
+                #         else:
+                #             self.get_logger().info(
+                #                 "turn right  "         )
+                #             w = 0.4
 
-                        self.get_logger().info(
-                            f"Obstacle ahead: front={d_front:.2f}, left={d_left:.2f}, right={d_right:.2f} -> avoidance"
-                        )
+                #         self.get_logger().info(
+                #             f"Obstacle ahead: front={d_front:.2f}, left={d_left:.2f}, right={d_right:.2f} -> avoidance"
+                #         )
 
                     
-                # Publish velocity commands
-                self.get_logger().info(f" v : {v}, w : {w}")
+                # # Publish velocity commands
+                # self.get_logger().info(f" v : {v}, w : {w}")
+            
                 self._publish_velocity_commands(v, w)
+
             
             # else: 
             #     self._publish_velocity_commands(0.0, 0.0)
+
 
     def _path_callback(self, path_msg: Path):
         """Subscriber callback. Saves the path the pure pursuit controller has to follow.

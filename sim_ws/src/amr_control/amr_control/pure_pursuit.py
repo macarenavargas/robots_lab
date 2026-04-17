@@ -2,6 +2,10 @@ import numpy as np
 import math 
 class PurePursuit:
     """Class to follow a path using a simple pure pursuit controller."""
+    LINEAR_SPEED_MAX = 0.22  # Maximum linear velocity in the abscence of angular velocity [m/s]
+    TRACK = 0.16  # Distance between same axle wheels [m]
+    WHEEL_RADIUS = 0.033  # Radius of the wheels [m]
+    WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS  # Maximum motor angular speed [rad/s]
 
     def __init__(
         self,
@@ -24,10 +28,18 @@ class PurePursuit:
         self._lookahead_distance: float = lookahead_distance # 0.25 in real robot 
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
-        self._v : float = 0.15 # 0.15 
-        self._alpha_threshold:float = 0.5
-        self._last_closest_idx: int = 0 
+        self._v : float = 0.1 # 0.s15 
+        self._Ki : float = 0.15
+        self._error_integral : float= 0.0
 
+        
+        if self._simulation:
+            self._alpha_threshold:float = 0.5
+        else:
+            self._alpha_threshold:float = 0.5
+        self._last_closest_idx: int = 0 
+        # Robot limits (using exact same values as wall_follower for consistency)
+    
 
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
         """Pure pursuit controller implementation.
@@ -83,24 +95,22 @@ class PurePursuit:
             
             # if self._logger: 
             #     self._logger.info(f" LARGE ALPHA !! alpha={alpha:.2f}, setting v=0 and w={w:.2f}")
-            return v, w
-        
+            
+
         else: 
+
+            # calculate the distance error to the closest path point and accumulate it
+            distance_error = np.linalg.norm(np.array((x, y)) - np.array(closest_xy))
+            self._error_integral += distance_error * self._dt
+
             # calculate the control commands
-            v = self._v #v is constant in pure pursuit algorithm. 
-            w = - 2* v * np.sin(alpha) /  self._lookahead_distance
-            #w = np.clip(w, -0.3, 0.3) # limit the value so its not so big. 
-            
-            
-        
-            # limit v if w is too big so that it behaves better in the curves 
-            # if abs(w)> 0.3: 
-            #     v = 0.1
-            
-            # if self._logger:
-            #     self._logger.info(f"PURE PERSUIT: v = {v:+.3f} m/s, w = {w:+.3f} rad/s, {alpha:.2f} rad")
+            v = self._v # v is constant in pure pursuit algorithm.
+            w = - 2 * v * np.sin(alpha) / self._lookahead_distance
+            # v, w = self._saturate_commands(v, w, alpha)
+            if self._Ki != 0.0:
+              w += self._Ki * self._error_integral * np.sign(alpha)
                         
-            return v, w
+        return v, w
 
     @property
     def path(self) -> list[tuple[float, float]]:
@@ -112,7 +122,35 @@ class PurePursuit:
         """Path setter."""
         self._path = value
 
+    def _saturate_commands(self, v: float, w: float, alpha: float) -> tuple[float, float]:
+        """Applies kinematic constraints to keep velocity commands within robot limits.
 
+        Args:
+            v: linear velocity [m/s].
+            w: angular velocity [rad/s].
+            alpha: angle between robot heading and target point [rad].
+
+        Returns:
+            A tuple containing the possible velocity commands:
+                v: limited linear velocity [m/s].
+                w: limited angular velocity [rad/s].
+        """
+        b = self.TRACK / 2.0
+        v_max = self.LINEAR_SPEED_MAX
+
+        # Ecuación (5) de la imagen
+        # w_max_permitida = (v_max - abs(v)) / b
+        
+        # 1. Basándose en la w calculada, recalculamos la v permitida (Ecuación 6)
+        # Esto reduce v si es necesario, o la incrementa para aprovechar el margen disponible.
+        v_permitida = v_max - abs(w) * b
+        v_permitida = max(0.0, v_permitida)
+
+        # 2. Ahora, usando esta nueva velocidad v_permitida, recalculamos la w.
+        # Esto garantiza que el robot mantenga la trayectoria y la curvatura del Pure Pursuit.
+        w_nueva = -2 * v_permitida * np.sin(alpha) / self._lookahead_distance
+
+        return v_permitida, w_nueva
 
     def _find_closest_point(self, x: float, y: float) -> tuple[tuple[float, float], int]:
         """
