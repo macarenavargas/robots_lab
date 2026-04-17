@@ -13,6 +13,9 @@ from transforms3d.euler import quat2euler
 
 from amr_control.pure_pursuit import PurePursuit
 
+# add subscription to the laser scan to avoid obstacles
+from sensor_msgs.msg import LaserScan
+
 
 class PurePursuitNode(LifecycleNode):
     def __init__(self):
@@ -76,6 +79,11 @@ class PurePursuitNode(LifecycleNode):
                 Path, "path", self._path_callback, 10
             )
 
+
+            # subscribe to the laser scan to avoid obstacles 
+            self._scan = None 
+            self._subscriber_scan = self.create_subscription(
+                LaserScan, "/scan", self._scan_callback, 10)
             
 
         except Exception:
@@ -102,7 +110,7 @@ class PurePursuitNode(LifecycleNode):
         self._logger.info(f" ---allow motion = {self._allow_motion}----")
         if not self._allow_motion:
             
-            self._logger.info(f" --i publish 0, 0!-- ")
+            self._logger.info(f" --i publish 0, 0!--")
             self._publish_velocity_commands(0.0, 0.0)
             return
 
@@ -120,10 +128,10 @@ class PurePursuitNode(LifecycleNode):
         
         
         if self._allow_motion: 
-            self._logger.info(f" entro en compute commands callback -> ALLOW MOTION = TRUE")
+          
         
             if pose_msg.localized:
-                # Parse pose
+                # Parse pose from the pure_pursuit algorithm. 
                 x = pose_msg.pose.position.x
                 y = pose_msg.pose.position.y
                 quat_w = pose_msg.pose.orientation.w
@@ -139,9 +147,29 @@ class PurePursuitNode(LifecycleNode):
                 #     f"[PP] USING POSE → x={x:.2f}, y={y:.2f}, localized={pose_msg.localized}"
                 # )
                 v, w = self._pure_pursuit.compute_commands(x, y, theta)
+                if self._scan is None:
+                    self._publish_velocity_commands(v, w)
+                    return
 
-            
-                # Publish
+
+                # Process lidar similarily to wall follower 
+                clean_scan = self._clean_lidar_data(self._scan)
+                d_front, d_left, d_right = self._get_sensor_readings(clean_scan)
+
+                # IF IT IS NEAR THE OBSTACLE, IGNORE the pure_pursuit commands and
+                # use the "mini_wall_follower" instead 
+
+                if d_front < 0.3:
+                    v = 0.05
+                    if d_left > d_right:
+                        w =0.4
+                    else:
+                        w = -0.4
+
+                    self.get_logger().info(
+                        f"Obstacle ahead: front={d_front:.2f}, left={d_left:.2f}, right={d_right:.2f} -> avoidance"
+                    )
+                # Publish velocity commands
                 self._publish_velocity_commands(v, w)
             
             # else: 
@@ -200,7 +228,62 @@ class PurePursuitNode(LifecycleNode):
 
         self._publisher.publish(msg)
 
+    
+    # create a callback for the laser scan to avoid obstacles
+    def _scan_callback(self, scan_msg: LaserScan):
+        self._scan = list(scan_msg.ranges)
+    
 
+    # copied function from wall follower. 
+    def _clean_lidar_data(self, z_scan: list[float]) -> list[float]:
+        safe_value = 0.9 * 0.16
+        return [
+            r if not (math.isnan(r) or math.isinf(r) or r <= 0.0) else safe_value
+            for r in z_scan
+        ]
+    
+    # copied function from wall follower.
+    def _get_sensor_readings(self, scan: list[float]) -> tuple[float, float, float]:
+        SIM_TOTAL_RAYS = 240.0
+        SIM_DEGREES_PER_RAY = 360.0 / SIM_TOTAL_RAYS
+
+        sim_front_rays_half = 20
+        sim_side_rays_half = 10
+
+        if self._simulation:
+            d_front = min(scan[-sim_front_rays_half:] + scan[:sim_front_rays_half])
+
+            idx_left = int(SIM_TOTAL_RAYS / 4)
+            d_left = min(scan[idx_left - sim_side_rays_half : idx_left + sim_side_rays_half + 1])
+
+            idx_right = int(3 * SIM_TOTAL_RAYS / 4)
+            d_right = min(scan[idx_right - sim_side_rays_half : idx_right + sim_side_rays_half + 1])
+
+            return d_front, d_left, d_right
+
+        else:
+            n = len(scan)
+            if n == 0:
+                return 8.0, 8.0, 8.0
+
+            front_aperture_deg = sim_front_rays_half * SIM_DEGREES_PER_RAY
+            side_aperture_deg = sim_side_rays_half * SIM_DEGREES_PER_RAY
+
+            real_rays_per_degree = n / 360.0
+            real_front_width = int(front_aperture_deg * real_rays_per_degree)
+            real_side_width = int(side_aperture_deg * real_rays_per_degree)
+
+            fw = max(1, real_front_width)
+            d_front = min(scan[-fw:] + scan[:fw])
+
+            idx_left = int(n / 4)
+            d_left = min(scan[idx_left - real_side_width : idx_left + real_side_width + 1])
+
+            idx_right = int(3 * n / 4)
+            d_right = min(scan[idx_right - real_side_width : idx_right + real_side_width + 1])
+
+            return d_front, d_left, d_right
+    
 def main(args=None):
     rclpy.init(args=args)
     pure_pursuit_node = PurePursuitNode()
