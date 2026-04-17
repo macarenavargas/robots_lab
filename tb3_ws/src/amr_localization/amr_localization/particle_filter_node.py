@@ -206,7 +206,7 @@ class ParticleFilterNode(LifecycleNode):
         else: 
 
             if self._waiting_to_update:
-                self._logger.info("waiting")
+                self._logger.info(f"waiting z_v: {z_v:.3f}, z_w: {z_w:.3f}")
 
             if self._waiting_to_update and abs(z_v) < 0.05 and abs(z_w) < 0.1:
                 self._waiting_to_update = False
