@@ -82,6 +82,7 @@ class PurePursuitNode(LifecycleNode):
 
             # subscribe to the laser scan to avoid obstacles 
             self._scan = None 
+            self._turn = False
             qos_profile = QoSProfile(
                 history=QoSHistoryPolicy.KEEP_LAST,
                 depth=10,
@@ -167,20 +168,30 @@ class PurePursuitNode(LifecycleNode):
                 # use the "mini_wall_follower" instead 
 
                 if d_front < 0.2:
-                    v = 0.0
-                    if d_left > d_right:
-                        self.get_logger().info(
-                            "turn left  "         )
-                        w = - 0.4
-                    else:
-                        self.get_logger().info(
-                            "turn right  "         )
-                        w = 0.4
+                    self._turn = True 
+                if self._turn: 
+                    if d_front >  0.4: 
+                        self._turn = False
+                    
+                    else : 
 
-                    self.get_logger().info(
-                        f"Obstacle ahead: front={d_front:.2f}, left={d_left:.2f}, right={d_right:.2f} -> avoidance"
-                    )
+                        v = 0.0
+                        if d_left > d_right:
+                            self.get_logger().info(
+                                "turn left  "         )
+                            w = - 0.4
+                        else:
+                            self.get_logger().info(
+                                "turn right  "         )
+                            w = 0.4
+
+                        self.get_logger().info(
+                            f"Obstacle ahead: front={d_front:.2f}, left={d_left:.2f}, right={d_right:.2f} -> avoidance"
+                        )
+
+                    
                 # Publish velocity commands
+                self.get_logger().info(f" v : {v}, w : {w}")
                 self._publish_velocity_commands(v, w)
             
             # else: 
