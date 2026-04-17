@@ -106,9 +106,11 @@ class PurePursuit:
             # calculate the control commands
             v = self._v # v is constant in pure pursuit algorithm.
             w = - 2 * v * np.sin(alpha) / self._lookahead_distance
-            # v, w = self._saturate_commands(v, w, alpha)
-            if self._Ki != 0.0:
-              w += self._Ki * self._error_integral * np.sign(alpha)
+
+            if self._simulation: 
+                # v, w = self._saturate_commands(v, w, alpha)
+                if self._Ki != 0.0:
+                    w += self._Ki * self._error_integral * np.sign(alpha)
                         
         return v, w
 
