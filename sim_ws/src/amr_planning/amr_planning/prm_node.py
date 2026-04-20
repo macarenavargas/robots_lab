@@ -94,14 +94,10 @@ class PRMNode(LifecycleNode):
 
             # Publishers
             # TODO: 4.6. Create the /path publisher (Path message).
-            #self._publisher_path = self.create_publisher(msg_type= Path, topic="/path", qos_profile=10)
-            #qos = QoSProfile(depth=10)
-            #qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
-
+          
             self._publisher_path = self.create_publisher(
                 msg_type=Path,
                 topic="/path",
-                #qos_profile=qos,
                 qos_profile=10,
             )
                         

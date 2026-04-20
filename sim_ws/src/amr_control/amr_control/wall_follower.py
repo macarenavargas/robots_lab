@@ -3,9 +3,7 @@ import numpy as np
 from enum import Enum, auto
 
 
-# PD AJUSTAR PD AJUSTAR PARAMETROS DE DB SCAN PROBAR UMBRALES SIMPLEE
-# AÑADIR LOGERS DESCRIPTIVOS
-# DEALING WITH MAX AND MIN IN PARTICLE FILTER
+
 class State(Enum):
     MOVE_AHEAD = auto()
     FOLLOW_WALL = auto()
@@ -139,8 +137,12 @@ class WallFollower:
         SIM_TOTAL_RAYS = 240.0
         SIM_DEGREES_PER_RAY = 360.0 / SIM_TOTAL_RAYS
 
-        sim_front_rays_half = 20  # +/- 20 rays from the front center of the robot
-        sim_side_rays_half = 10  # +/- 10 rays from the center of each side (90º y 270º)
+        if self._simulation:
+            sim_front_rays_half = 20  # +/- 20 rays from the front center of the robot
+            sim_side_rays_half = 10  # +/- 10 rays from the center of each side (90º y 270º)
+        else:
+            sim_front_rays_half = 15  # +/- 20 rays from the front center of the robot
+            sim_side_rays_half = 10  # +/- 10 rays from the center of each side (90º y 270º)
 
         if self._simulation:
             # STEP 1: extract minimum distance from the front section

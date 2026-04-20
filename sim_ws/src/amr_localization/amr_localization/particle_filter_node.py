@@ -184,8 +184,6 @@ class ParticleFilterNode(LifecycleNode):
         self._publisher_motion_control.publish(motion_msg)
 
         # b) MOVEMENT: execute as many motion steps as measurementes acumulated in odometry
-        # self._logger.info("moving particles")
-        # self._logger.info(f"ODOEMTRY UPDATES: {self._odom_measurements}")
         if len(self._odom_measurements) > 0:
             for z_v, z_w in self._odom_measurements:
                 self._execute_motion_step(z_v, z_w)
@@ -193,7 +191,6 @@ class ParticleFilterNode(LifecycleNode):
         self._odom_measurements.clear()
 
         # c) MEASUREMENT: execute one single correction phase
-        # self._logger.info("sensing particles")
         x_h, y_h, theta_h = self._execute_measurement_step(self._last_z_scan)
         if self._localized:
             self._x_pred = x_h
@@ -308,12 +305,9 @@ class ParticleFilterNode(LifecycleNode):
             z_v: Odometric estimate of the linear velocity of the robot center [m/s].
             z_w: Odometric estimate of the angular velocity of the robot center [rad/s].
         """
-        #start_time = time.perf_counter()
+
         self._particle_filter.move(z_v, z_w)
-        #move_time = time.perf_counter() - start_time
-
-        # self.get_logger().info(f"Move step time: {move_time:7.3f} s")
-
+   
         if self._enable_plot:
             self._particle_filter.show("Move", save_figure=True)
 

@@ -3,9 +3,6 @@ import numpy as np
 from enum import Enum, auto
 
 
-# PD AJUSTAR PD AJUSTAR PARAMETROS DE DB SCAN PROBAR UMBRALES SIMPLEE
-# AÑADIR LOGERS DESCRIPTIVOS
-# DEALING WITH MAX AND MIN IN PARTICLE FILTER
 class State(Enum):
     MOVE_AHEAD = auto()
     FOLLOW_WALL = auto()
@@ -187,22 +184,17 @@ class WallFollower:
             front = scan[-fw:] + scan[:fw]
             valid_front = [v for v in front if v > 0.145]
             d_front = min(valid_front) if valid_front else 0.145
-            # self._logger.info(f"LIDAR  FRONT: {scan[-fw:] + scan[:fw]}")
-
+     
             idx_left = int(n / 4)
             left = scan[idx_left - real_side_width : idx_left + real_side_width + 1]
             valid_left = [v for v in left if v > 0.145]
             d_left = min(valid_left) if valid_left else 0.145
-            # self._logger.info(f"LIDAR  LEFT: {left}")
+       
             
             idx_right = int(3 * n / 4)
             right = scan[idx_right - real_side_width : idx_right + real_side_width + 1]
             valid_right = [v for v in right if v > 0.145]
             d_right = min(valid_right) if valid_right else 0.145
-            # self._logger.info(f"LIDAR  RIGHT: {right}")
-
-        
-
          
 
 

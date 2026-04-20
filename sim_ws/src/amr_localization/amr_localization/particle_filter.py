@@ -26,7 +26,6 @@ class ParticleFilter:
         dt: float,
         map_path: str,
         particle_count: int,
-        # try to change this 
         sigma_v: float = 0.05,  # initial value : 0.05
         sigma_w: float = 0.1,  # initial value : 0.1
         sigma_z: float = 0.2,  # initial value : 0.2
@@ -56,11 +55,11 @@ class ParticleFilter:
             simulation: True if running in simulation, False if running on the real robot.
 
         """
-        # particle_count = 500SSSS
+        
         self._dt: float = dt
         self._initial_particle_count: int = particle_count
         self._logger = logger
-        self._particle_count: int = particle_count  # particle_count
+        self._particle_count: int = particle_count  
         self._sensor_range_max: float = sensor_range_max
         self._sensor_range_min: float = sensor_range_min
         self._sigma_v: float = sigma_v
@@ -68,8 +67,8 @@ class ParticleFilter:
         self._sigma_z: float = sigma_z
         self._simulation: bool = simulation
         self._iteration: int = 0
-        self._num_rays = 8  # 8
-        # self._localized = False
+        self._num_rays = 8  
+    
 
         self._map = Map(
             map_path,
@@ -207,10 +206,6 @@ class ParticleFilter:
         if self._logger:
             self._logger.info(f"Mean error: {mean_error:.3f}")
 
-        # if self._logger:
-        #     self._logger.info(
-        #         f"Verosimilitud media: {average_likelihood:.2f} | Referencia: {expected_likelihood:.2f}"
-        #     )
 
         # 4. Check if the average likelihood is significantly lower than the expected one, 
         # which could indicate that the robot is lost or has been captured by a wrong cluster.
@@ -218,7 +213,7 @@ class ParticleFilter:
             if self._logger:
                 self._logger.error(
                     f"  THE ROBOT IS LOST "
-                    f"({mean_error:.2f} is inferior to {error_threshold:.2f}). "
+                    f"({mean_error:.2f} is superior to {error_threshold:.2f}). "
                     f"Reloading the particle filter . . ."
                 )
 
@@ -305,7 +300,7 @@ class ParticleFilter:
     def _move_cpp(self, v: float, w: float) -> None:
         """C++ implementation of the motion update."""
         self._iteration += 1
-        #start = time.time()
+
         
         new_particles = cpp_module.move(
             self._particles.tolist(),
@@ -316,7 +311,7 @@ class ParticleFilter:
         )
         
         self._particles = np.array(new_particles)
-        #print("MOVING TIME :", time.time() - start)
+      
 
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
@@ -550,8 +545,7 @@ class ParticleFilter:
 
         return particles
 
-    # this is the _sense function from before. 
-    # if C++ doesnt work, use this as _sense. 
+   
     def _sense_python(self, pose: tuple[float, float, float]) -> list[float]:
         """Obtains the predicted measurement of every LiDAR ray given the robot's pose.
 

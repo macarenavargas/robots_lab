@@ -187,12 +187,7 @@ class ParticleFilterNode(LifecycleNode):
         
 
     def _scan_callback(self, scan_msg: LaserScan):
-    #     self.get_logger().info(
-    #     f"[PF][SCAN] len(scan)={len(scan_msg.ranges)} | "
-    #     f"angle_min={scan_msg.angle_min:.4f} | "
-    #     f"angle_max={scan_msg.angle_max:.4f} | "
-    #     f"angle_increment={scan_msg.angle_increment:.6f}"
-    # )
+   
         self._last_z_scan = scan_msg.ranges
 
     def _odometry_callback(self, odom_msg: Odometry):
@@ -240,7 +235,6 @@ class ParticleFilterNode(LifecycleNode):
                 self._timer.reset()
 
             else:
-                # probar estos valores
                 noise_threshold_v = 0.01 # 0.1
                 noise_threshold_w = 0.1
 
@@ -290,20 +284,23 @@ class ParticleFilterNode(LifecycleNode):
         pose = (float("inf"), float("inf"), float("inf"))
 
         if self._localized or not self._steps % self._steps_btw_sense_updates:
+            # 1 . Resample (correction)
             start_time = time.perf_counter()
             self._particle_filter.resample(z_scan)
             sense_time = time.perf_counter() - start_time
 
             self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
-
+            
+            # 2. Estimate pose
             if self._enable_plot:
                 self._particle_filter.show("Sense", save_figure=True)
 
             start_time = time.perf_counter()
             self._localized, pose = self._particle_filter.compute_pose()
             clustering_time = time.perf_counter() - start_time
+            self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
 
-            # self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
+
 
         return pose
 
@@ -314,11 +311,8 @@ class ParticleFilterNode(LifecycleNode):
             z_v: Odometric estimate of the linear velocity of the robot center [m/s].
             z_w: Odometric estimate of the angular velocity of the robot center [rad/s].
         """
-        start_time = time.perf_counter()
         self._particle_filter.move(z_v, z_w)
-        move_time = time.perf_counter() - start_time
-
-        # self.get_logger().info(f"Move step time: {move_time:7.3f} s")
+  
 
         if self._enable_plot:
             self._particle_filter.show("Move", save_figure=True)
@@ -350,11 +344,6 @@ class ParticleFilterNode(LifecycleNode):
             msg.pose.orientation.y = qy
             msg.pose.orientation.z = qz
             msg.pose.orientation.w = qw
-
-            # self.get_logger().info(
-            #     f"[PF] localized={self._localized} | x={x_h:.2f}, y={y_h:.2f}, theta={theta_h:.2f}"
-            # )
-   
 
         self._publisher_pose.publish(msg)
 

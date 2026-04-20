@@ -78,7 +78,7 @@ class WallFollowerNode(LifecycleNode):
             )
 
             self._subscribers: list[message_filters.Subscriber] = []
-            # Append as many topics as needed
+
 
             self._subscribers.append(
                 message_filters.Subscriber(self, Odometry, "/odometry", qos_profile=qos_profile)
@@ -161,8 +161,7 @@ class WallFollowerNode(LifecycleNode):
 
         # Execute wall follower
         v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
-        # self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
-
+        
         # Publish
         self._publish_velocity_commands(v, w)
 

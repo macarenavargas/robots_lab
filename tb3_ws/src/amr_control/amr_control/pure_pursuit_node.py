@@ -1,7 +1,8 @@
 
 import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
+
 
 from amr_msgs.msg import PoseStamped, MotionControl
 from geometry_msgs.msg import Twist, TwistStamped
@@ -15,6 +16,18 @@ from amr_control.pure_pursuit import PurePursuit
 
 
 class PurePursuitNode(LifecycleNode):
+
+    # Robot limits
+    LINEAR_SPEED_MAX = 0.22  # Maximum linear velocity in the abscence of angular velocity [m/s]
+    SENSOR_RANGE_MIN = 0.16  # Minimum LiDAR sensor range [m]
+    SENSOR_RANGE_MAX = 8.0  # Maximum LiDAR sensor range [m]
+    TRACK = 0.16  # Distance between same axle wheels [m]
+    WHEEL_RADIUS = 0.033  # Radius of the wheels [m]
+    WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS  # Maximum motor angular speed [rad/s]
+    
+
+
+
     def __init__(self):
         """Pure pursuit node initializer."""
         super().__init__("pure_pursuit")
@@ -50,7 +63,6 @@ class PurePursuitNode(LifecycleNode):
             )
 
             # Publishers
-            #self._publisher = self.create_publisher(TwistStamped, "cmd_vel", 10)
             if self._simulation:
                 self._publisher = self.create_publisher(TwistStamped, "cmd_vel", 10)
 
@@ -66,11 +78,6 @@ class PurePursuitNode(LifecycleNode):
             self._subscriber_pose = self.create_subscription(
                 PoseStamped, "pose", self._compute_commands_callback, 10)
 
-            
-            #self._subscriber_path = self.create_subscription(Path, "path", self._path_callback, 10)
-            
-            #qos = QoSProfile(depth=10)
-            #qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
 
             self._subscriber_path = self.create_subscription(
                 Path, "path", self._path_callback, 10
@@ -134,18 +141,13 @@ class PurePursuitNode(LifecycleNode):
                 _, _, theta = quat2euler((quat_w, quat_x, quat_y, quat_z))
                 theta %= 2 * math.pi
 
-                # Execute pure pursuit
-                # self.get_logger().info(
-                #     f"[PP] USING POSE → x={x:.2f}, y={y:.2f}, localized={pose_msg.localized}"
-                # )
+            
                 v, w = self._pure_pursuit.compute_commands(x, y, theta)
 
             
                 # Publish
                 self._publish_velocity_commands(v, w)
-            
-            # else: 
-            #     self._publish_velocity_commands(0.0, 0.0)
+       
 
     def _path_callback(self, path_msg: Path):
         """Subscriber callback. Saves the path the pure pursuit controller has to follow.

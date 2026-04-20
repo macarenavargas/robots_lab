@@ -39,7 +39,6 @@ class ParticleFilter:
         dt: float,
         map_path: str,
         particle_count: int,
-        # probar a aumentar, jugar con estos valores
         sigma_v: float = 0.05,  # initial value : 0.05
         sigma_w: float = 0.1,  # initial value : 0.1
         sigma_z: float = 0.2,  # initial value : 0.2
@@ -69,11 +68,11 @@ class ParticleFilter:
             simulation: True if running in simulation, False if running on the real robot.
 
         """
-        # particle_count = 500SSSS
+      
         self._dt: float = dt
         self._initial_particle_count: int = particle_count
         self._logger = logger
-        self._particle_count: int = particle_count  # particle_count
+        self._particle_count: int = particle_count 
         self._sensor_range_max: float = sensor_range_max
         self._sensor_range_min: float = sensor_range_min
         self._sigma_v: float = sigma_v
@@ -81,9 +80,9 @@ class ParticleFilter:
         self._sigma_z: float = sigma_z
         self._simulation: bool = simulation
         self._iteration: int = 0
-        self._num_rays = 8  # 8
+        self._num_rays = 8 
         self._prev_raw_measurements = None
-        # self._localized = False
+
 
         self._map = Map(
             map_path,
@@ -203,14 +202,14 @@ class ParticleFilter:
         if math.isinf(pose[0]):
             return False
 
-        # 1. Extraemos las medidas reales
+        # 1. Extract the real measurements of the lidar in this pose 
         z_real = self._extract_robust_measurements(measurements)
 
-        # 2. Simulamos las medidas que DEBERÍA tener esa pose según el mapa
+        # 2. Estimate the measuremetns that the robot SHOULD have in this pose for this map
         z_simulated = self._sense(pose)
         z_simulated = np.nan_to_num(z_simulated, nan=self._sensor_range_min)
 
-        # 3. Calculamos la VEROSIMILITUD MEDIA de las medidas de los sensores
+        # 3. Mean likelihood of the sensor measurements
         total_likelihood = 0.0
         for i in range(self._num_rays):
             total_likelihood += self._gaussian(z_simulated[i], self._sigma_z, z_real[i])
@@ -222,16 +221,18 @@ class ParticleFilter:
                 f"Verosimilitud media: {average_likelihood:.2f} | Referencia: {expected_likelihood:.2f}"
             )
 
-        # 4. Comprobamos 
+        # 4. Check if the average likelihood is significantly lower than the expected one, 
+        # which could indicate that the robot is lost or has been captured by a wrong cluster.
+
         if average_likelihood < (expected_likelihood):
             if self._logger:
                 self._logger.error(
-                    f" ROBOT ESTÁ PERDIDO"
-                    f"({average_likelihood:.2f} es inferior a {expected_likelihood:.2f}). "
-                    f"La solución consiste en reiniciar el filtro..."
+                    f" THE ROBOT IS LOST"
+                    f"({average_likelihood:.2f} is inferior to {expected_likelihood:.2f}). "
+                    f"Reloading the particle filter . . ."
                 )
 
-            # 5. La solución: reiniciar el filtro por completo
+            # 5. Solution -> re-load the filter. 
             self._particles = self._init_particles(
                 self._initial_particle_count,
                 global_localization=True,
@@ -242,7 +243,7 @@ class ParticleFilter:
 
             return False
 
-        # La pose es válida
+        # The pose is valid, then its localized well. continue ! 
         return True
 
     def move(self, v: float, w: float) -> None:
@@ -300,12 +301,12 @@ class ParticleFilter:
         self._particles[:, 1] = y_new
         self._particles[:, 2] = theta_new
 
-        print("MOVING TIME :", time.time() - start)
+       
 
     def _move_cpp(self, v: float, w: float) -> None:
         """C++ implementation of the motion update."""
         self._iteration += 1
-        start = time.time()
+    
         
         new_particles = cpp_module.move(
             self._particles.tolist(),
@@ -316,7 +317,7 @@ class ParticleFilter:
         )
         
         self._particles = np.array(new_particles)
-        print("MOVING TIME :", time.time() - start)
+        
 
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
@@ -567,8 +568,7 @@ class ParticleFilter:
 
         return particles
 
-    # this is the _sense function from before. 
-    # if C++ doesnt work, use this as _sense. 
+ 
     def _sense_python(self, pose: tuple[float, float, float]) -> list[float]:
         """Obtains the predicted measurement of every LiDAR ray given the robot's pose.
 

@@ -53,7 +53,7 @@ class PurePursuit:
         closest_xy, closest_idx = self._find_closest_point(x,y)
    
         target_xy = self._find_target_point(closest_xy ,closest_idx )
-        #target_xy = self._find_target_point((x,y),closest_idx )
+   
         x_target,y_target = target_xy
         
 
@@ -69,30 +69,33 @@ class PurePursuit:
 
        
         # check if alpha is too high
+        # check if alpha is too high
         if abs(alpha) > self._alpha_threshold:
-            v = 0.0 
-            w = - 0.4 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
+
+            if self._simulation: 
+                v = 0.0 
+                w = - 0.2 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
+            else: 
+                v = 0.0 
+                w = - 0.4 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
             
-            if self._logger: 
-                self._logger.info(f" LARGE ALPHA !! alpha={alpha:.2f}, setting v=0 and w={w:.2f}")
-            return v, w
         
         else: 
+
+            # calculate the distance error to the closest path point and accumulate it
+            distance_error = np.linalg.norm(np.array((x, y)) - np.array(closest_xy))
+            self._error_integral += distance_error * self._dt
+
             # calculate the control commands
             v = self._v #v is constant in pure pursuit algorithm. 
             w = - 2* v * np.sin(alpha) /  self._lookahead_distance
-            #w = np.clip(w, -0.3, 0.3) # limit the value so its not so big. 
-            
-            
-        
-            # limit v if w is too big so that it behaves better in the curves 
-            # if abs(w)> 0.3: 
-            #     v = 0.1
-            
-            if self._logger:
-                self._logger.info(f"PURE PERSUIT: v = {v:+.3f} m/s, w = {w:+.3f} rad/s, {alpha:.2f} rad")
-                        
-            return v, w
+
+            if self._simulation: 
+                # v, w = self._saturate_commands(v, w, alpha)
+                if self._Ki != 0.0:
+                    w += self._Ki * self._error_integral * np.sign(alpha)
+                             
+        return v, w
 
     @property
     def path(self) -> list[tuple[float, float]]:
@@ -103,6 +106,37 @@ class PurePursuit:
     def path(self, value: list[tuple[float, float]]) -> None:
         """Path setter."""
         self._path = value
+
+    
+    def _saturate_commands(self, v: float, w: float, alpha: float) -> tuple[float, float]:
+        """Applies kinematic constraints to keep velocity commands within robot limits.
+
+        Args:
+            v: linear velocity [m/s].
+            w: angular velocity [rad/s].
+            alpha: angle between robot heading and target point [rad].
+
+        Returns:
+            A tuple containing the possible velocity commands:
+                v: limited linear velocity [m/s].
+                w: limited angular velocity [rad/s].
+        """
+        b = self.TRACK / 2.0
+        v_max = self.LINEAR_SPEED_MAX
+
+        # w_max_allowed = (v_max - abs(v)) / b
+            
+        # 1. Based on the calculated w, we recalculate the allowed v (Equation 6)
+        # This reduces v if necessary, or increases it to take advantage of the available margin.
+        v_allowed = v_max - abs(w) * b
+        v_allowed = max(0.0, v_allowed)
+
+        # 2. Now, using this new allowed velocity v_allowed, we recalculate w.
+        # This ensures that the robot maintains the trajectory and curvature of Pure Pursuit.
+        w_new = -2 * v_allowed * np.sin(alpha) / self._lookahead_distance
+
+        return v_allowed, w_new
+
 
 
 
@@ -158,12 +192,11 @@ class PurePursuit:
 
          # TODO: 4.10. Complete the function body 
         target_xy = (0.0, 0.0) # default value if no point is found.
-        
-        #cdist of numpy (?)
+
         for i in range(origin_idx, len(self.path)): 
 
             distance = np.linalg.norm(np.array(self.path[i]) - np.array(origin_xy))
-            if distance > self._lookahead_distance: #>= (?)
+            if distance > self._lookahead_distance:
                 # strategy : we choose the first point that passes the distance 
                 target_xy = self.path[i]
                 return target_xy
