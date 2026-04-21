@@ -287,14 +287,6 @@ class ParticleFilterNode(LifecycleNode):
             clustering_time = time.perf_counter() - start_time
             self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
 
-            # 3. CHECK IF THE POSE IS CORRECT ! 
-            if self._localized and not self._was_localized:
-                correct_pose = self._particle_filter.check_likelihood(pose, z_scan)
-
-                if not correct_pose:
-                    self._localized = False
-                        
-            self._was_localized = self._localized 
             
         return pose
 
