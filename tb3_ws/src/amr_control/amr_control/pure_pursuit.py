@@ -1,7 +1,14 @@
-import numpy as np 
-import math 
+import numpy as np
+import math
+
+
 class PurePursuit:
     """Class to follow a path using a simple pure pursuit controller."""
+
+    LINEAR_SPEED_MAX = 0.22  # Maximum linear velocity in the absence of angular velocity [m/s]
+    TRACK = 0.16  # Distance between same axle wheels [m]
+    WHEEL_RADIUS = 0.033  # Radius of the wheels [m]
+    WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS  # Maximum motor angular speed [rad/s]
 
     def __init__(
         self,
@@ -17,17 +24,23 @@ class PurePursuit:
             lookahead_distance: Distance to the next target point [m].
             logger: Logger object to output messages with different severity levels.
             simulation: True if running in simulation, False if running on the real robot.
-
         """
         self._dt: float = dt
         self._logger = logger
         self._lookahead_distance: float = lookahead_distance
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
-        self._v : float = 0.15 # 0.15 
-        self._alpha_threshold:float = 0.5
-        self._last_closest_idx: int = 0 
 
+        if self._simulation:
+            self._v: float = 0.15
+            self._Ki: float = 0.15
+        else:
+            self._v: float = 0.15
+            self._Ki: float = 0.0
+
+        self._error_integral: float = 0.0
+        self._alpha_threshold: float = 0.5
+        self._last_closest_idx: int = 0
 
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
         """Pure pursuit controller implementation.
@@ -38,63 +51,50 @@ class PurePursuit:
             theta: Estimated robot heading [rad].
 
         Returns:
-            v: Linear velocity [m/s].
-            w: Angular velocity [rad/s].
-
+            tuple[float, float]:
+                v: Linear velocity [m/s].
+                w: Angular velocity [rad/s].
         """
         # TODO: 4.11. Complete the function body with your code (i.e., compute v and w).
         if not self._path:
-    
             return 0.0, 0.0
-        
-        
 
-        # get the closest and target points 
-        closest_xy, closest_idx = self._find_closest_point(x,y)
-   
-        target_xy = self._find_target_point(closest_xy ,closest_idx )
-   
-        x_target,y_target = target_xy
-        
+        # Get the closest and target points
+        closest_xy, closest_idx = self._find_closest_point(x, y)
+        target_xy = self._find_target_point(closest_xy, closest_idx)
+        x_target, y_target = target_xy
 
-        # calculate angle alpha and beta with the formulas
-        # values between 0 and 2pi 
+        # Calculate angle alpha and beta with the formulas
+        # Values between 0 and 2pi
         beta = np.arctan2(y_target - y, x_target - x)
-        alpha = beta - theta 
+        alpha = beta - theta
 
-        if self._simulation: 
+        if self._simulation:
             alpha = (alpha + np.pi) % (2 * np.pi) - np.pi
-        else: 
+        else:
             alpha = math.atan2(math.sin(alpha), math.cos(alpha))
 
-       
-        # check if alpha is too high
-        # check if alpha is too high
+        # Check if alpha is too high
         if abs(alpha) > self._alpha_threshold:
+            if self._simulation:
+                v = 0.0
+                w = -0.2 * np.sign(alpha)  # Use the sign to rotate in the direction of the target point.
+            else:
+                v = 0.0
+                w = -0.4 * np.sign(alpha)  # Use the sign to rotate in the direction of the target point.
+        else:
+            # Calculate the control commands
+            v = self._v  # v is constant in pure pursuit algorithm.
+            w = -2 * v * np.sin(alpha) / self._lookahead_distance
 
-            if self._simulation: 
-                v = 0.0 
-                w = - 0.2 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
-            else: 
-                v = 0.0 
-                w = - 0.4 * np.sign(alpha) # use the sign to rotate in the direction of the target point.
-            
-        
-        else: 
+            if self._simulation:
+                # Calculate the distance error to the closest path point and accumulate it
+                distance_error = np.linalg.norm(np.array((x, y)) - np.array(closest_xy))
+                self._error_integral += distance_error * self._dt
 
-            # calculate the distance error to the closest path point and accumulate it
-            distance_error = np.linalg.norm(np.array((x, y)) - np.array(closest_xy))
-            self._error_integral += distance_error * self._dt
-
-            # calculate the control commands
-            v = self._v #v is constant in pure pursuit algorithm. 
-            w = - 2* v * np.sin(alpha) /  self._lookahead_distance
-
-            if self._simulation: 
-                # v, w = self._saturate_commands(v, w, alpha)
                 if self._Ki != 0.0:
                     w += self._Ki * self._error_integral * np.sign(alpha)
-                             
+
         return v, w
 
     @property
@@ -108,79 +108,43 @@ class PurePursuit:
         self._path = value
 
     
-    def _saturate_commands(self, v: float, w: float, alpha: float) -> tuple[float, float]:
-        """Applies kinematic constraints to keep velocity commands within robot limits.
-
-        Args:
-            v: linear velocity [m/s].
-            w: angular velocity [rad/s].
-            alpha: angle between robot heading and target point [rad].
-
-        Returns:
-            A tuple containing the possible velocity commands:
-                v: limited linear velocity [m/s].
-                w: limited angular velocity [rad/s].
-        """
-        b = self.TRACK / 2.0
-        v_max = self.LINEAR_SPEED_MAX
-
-        # w_max_allowed = (v_max - abs(v)) / b
-            
-        # 1. Based on the calculated w, we recalculate the allowed v (Equation 6)
-        # This reduces v if necessary, or increases it to take advantage of the available margin.
-        v_allowed = v_max - abs(w) * b
-        v_allowed = max(0.0, v_allowed)
-
-        # 2. Now, using this new allowed velocity v_allowed, we recalculate w.
-        # This ensures that the robot maintains the trajectory and curvature of Pure Pursuit.
-        w_new = -2 * v_allowed * np.sin(alpha) / self._lookahead_distance
-
-        return v_allowed, w_new
-
-
-
 
     def _find_closest_point(self, x: float, y: float) -> tuple[tuple[float, float], int]:
-        """
-        
-        Find the closest path point to the current robot pose.
+        """Find the closest path point to the current robot pose.
+
         Args:
             x: Estimated robot x coordinate [m].
             y: Estimated robot y coordinate [m].
-        Returns:
-            tuple[float, float]: (x, y) coordinates of the closest path point [m].
-            int: Index of the path point found.
-        """
 
-         # TODO: 4.9. Complete the function body (i.e., find closest_xy and closest_idx).
+        Returns:
+            tuple[tuple[float, float], int]:
+                - (x, y) coordinates of the closest path point [m].
+                - Index of the path point found.
+        """
+        # TODO: 4.9. Complete the function body (i.e., find closest_xy and closest_idx).
 
         if not self.path:
             return (0.0, 0.0), 0
-        
-        
+
         start_idx = self._last_closest_idx
         closest_xy = self.path[start_idx]
         closest_idx = start_idx
         closest_distance = np.inf
 
         for i in range(start_idx, len(self.path)):
-            # for every node, get the distance to the robot 
+            # For every node, get the distance to the robot
             x_node, y_node = self.path[i]
             distance = np.linalg.norm(np.array((x, y)) - np.array((x_node, y_node)))
-            # if it is the closest one, save its parameters. 
-
+            
+            # If it is the closest one, save its parameters
             if distance < closest_distance:
                 closest_xy = (x_node, y_node)
                 closest_idx = i
                 closest_distance = distance
 
-
         self._last_closest_idx = closest_idx
-        
-        return closest_xy, closest_idx
-    
 
-    #-----------find target point -----------------
+        return closest_xy, closest_idx
 
     def _find_target_point(
         self, origin_xy: tuple[float, float], origin_idx: int
@@ -188,24 +152,19 @@ class PurePursuit:
         """
         DISTANCE METHOD: choose the first point that is at least lookahead_distance away from the current robot pose.
         """
-        
+        # TODO: 4.10. Complete the function body
+        target_xy = (0.0, 0.0)  # Default value if no point is found.
 
-         # TODO: 4.10. Complete the function body 
-        target_xy = (0.0, 0.0) # default value if no point is found.
-
-        for i in range(origin_idx, len(self.path)): 
-
+        for i in range(origin_idx, len(self.path)):
             distance = np.linalg.norm(np.array(self.path[i]) - np.array(origin_xy))
             if distance > self._lookahead_distance:
-                # strategy : we choose the first point that passes the distance 
+                # Strategy: we choose the first point that passes the distance
                 target_xy = self.path[i]
                 return target_xy
 
-        
-        # if the target has not changed, then we assume we reached the goal 
-        if target_xy == (0.0, 0.0): 
-            target_xy = self.path[-1] # return goal 
+        # If the target has not changed, then we assume we reached the goal
+        if target_xy == (0.0, 0.0):
+            target_xy = self.path[-1]  # Return goal
             return target_xy
-    
-      
+
         return target_xy

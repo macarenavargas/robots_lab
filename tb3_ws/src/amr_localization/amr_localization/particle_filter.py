@@ -182,70 +182,7 @@ class ParticleFilter:
 
         return localized, pose
 
-    def check_likelihood(
-        self,
-        pose: tuple[float, float, float],
-        measurements: list[float],
-        expected_likelihood: float = 1.5,
-    ) -> bool:
-        """
-        Detecta falsa convergencia o secuestro midiendo la discrepancia
-        de la verosimilitud media, tal y como indica el enunciado.
-
-        Args:
-            pose: Pose estimada a evaluar.
-            measurements: Lecturas reales del LiDAR.
-            expected_likelihood: Verosimilitud media que se obtiene cuando el robot converge bien (A calibrar empíricamente).
-            tolerance: Porcentaje de caída permitido antes de considerar que hay "demasiada discrepancia" (ej. 0.5 = 50%).
-        """
-
-        if math.isinf(pose[0]):
-            return False
-
-        # 1. Extract the real measurements of the lidar in this pose 
-        z_real = self._extract_robust_measurements(measurements)
-
-        # 2. Estimate the measuremetns that the robot SHOULD have in this pose for this map
-        z_simulated = self._sense(pose)
-        z_simulated = np.nan_to_num(z_simulated, nan=self._sensor_range_min)
-
-        # 3. Mean likelihood of the sensor measurements
-        total_likelihood = 0.0
-        for i in range(self._num_rays):
-            total_likelihood += self._gaussian(z_simulated[i], self._sigma_z, z_real[i])
-
-        average_likelihood = total_likelihood / self._num_rays
-
-        if self._logger:
-            self._logger.info(
-                f"Verosimilitud media: {average_likelihood:.2f} | Referencia: {expected_likelihood:.2f}"
-            )
-
-        # 4. Check if the average likelihood is significantly lower than the expected one, 
-        # which could indicate that the robot is lost or has been captured by a wrong cluster.
-
-        if average_likelihood < (expected_likelihood):
-            if self._logger:
-                self._logger.error(
-                    f" THE ROBOT IS LOST"
-                    f"({average_likelihood:.2f} is inferior to {expected_likelihood:.2f}). "
-                    f"Reloading the particle filter . . ."
-                )
-
-            # 5. Solution -> re-load the filter. 
-            self._particles = self._init_particles(
-                self._initial_particle_count,
-                global_localization=True,
-                initial_pose=(0.0, 0.0, 0.0),
-                initial_pose_sigma=(0.0, 0.0, 0.0),
-            )
-            self._particle_count = self._initial_particle_count
-
-            return False
-
-        # The pose is valid, then its localized well. continue ! 
-        return True
-
+    
     def move(self, v: float, w: float) -> None:
         """Performs a motion update on the particles.
 

@@ -90,7 +90,8 @@ class WallFollower:
 
         if self._logger is not None:
             self._logger.info(
-                f"[{self._state.name}] Side:{'R' if self._side_sign == 1 else 'L'} | Front:{d_front:.2f} | Right:{d_right:.3f} |  Left: {d_left:.3f} | w:{w:.2f}"
+                f"[{self._state.name}] Side:{'R' if self._side_sign == 1 else 'L'} "
+                f"| Front:{d_front:.2f} | Right:{d_right:.3f} |  Left: {d_left:.3f} | w:{w:.2f}"
             )
 
         if not self._simulation:
@@ -107,16 +108,15 @@ class WallFollower:
         Returns:
             A clean list of distances.
         """
-        
         safe_value = 0.9 * self.SENSOR_RANGE_MIN
 
         clean_scan = [
-            r if not (math.isnan(r) or math.isinf(r) or r <= 0.0) else safe_value for r in z_scan
+            r if not (math.isnan(r) or math.isinf(r) or r <= 0.0) else safe_value
+            for r in z_scan
         ]
         return clean_scan
 
     def _get_robust_min(self, values: list[float]) -> float:
-
         k = min(len(values), 5)
         sorted_vals = sorted(values)
         return sum(sorted_vals[:k]) / k
@@ -132,9 +132,9 @@ class WallFollower:
                 d_left: Distance to the closest obstacle on the left [m].
                 d_right: Distance to the closest obstacle on the right [m].
         """
-       
         SIM_TOTAL_RAYS = 240.0
         SIM_DEGREES_PER_RAY = 360.0 / SIM_TOTAL_RAYS
+
         if self._simulation:
             sim_front_rays_half = 20  # +/- 20 rays from the front center of the robot
             sim_side_rays_half = 10  # +/- 10 rays from the center of each side (90º y 270º)
@@ -142,18 +142,17 @@ class WallFollower:
             sim_front_rays_half = 15  # +/- 20 rays from the front center of the robot
             sim_side_rays_half = 10  # +/- 10 rays from the center of each side (90º y 270º)
 
-
         if self._simulation:
             # STEP 1: extract minimum distance from the front section
-            d_front = min(scan[-sim_front_rays_half:] + scan[:sim_front_rays_half], default=0.145)
+            d_front = min(scan[-sim_front_rays_half:] + scan[:sim_front_rays_half])
 
             # STEP 2: extract minimum distance from the left section (center at 90º)
             idx_left = int(SIM_TOTAL_RAYS / 4)  # index 60
-            d_left = min(scan[idx_left - sim_side_rays_half : idx_left + sim_side_rays_half + 1],default=0.145)
+            d_left = min(scan[idx_left - sim_side_rays_half : idx_left + sim_side_rays_half + 1])
 
             # STEP 3: extract minimum distance from the right section (center at 270º)
             idx_right = int(3 * SIM_TOTAL_RAYS / 4)  # index 180
-            d_right = min(scan[idx_right - sim_side_rays_half : idx_right + sim_side_rays_half + 1],default=0.145)
+            d_right = min(scan[idx_right - sim_side_rays_half : idx_right + sim_side_rays_half + 1])
 
             return d_front, d_left, d_right
 
@@ -166,7 +165,6 @@ class WallFollower:
                     self.SENSOR_RANGE_MAX,
                 )
 
-       
             # STEP 1: transform simualtion rays into aperture degrees
             front_aperture_deg = sim_front_rays_half * SIM_DEGREES_PER_RAY
             side_aperture_deg = sim_side_rays_half * SIM_DEGREES_PER_RAY
@@ -176,27 +174,21 @@ class WallFollower:
             real_front_width = int(front_aperture_deg * real_rays_per_degree)
             real_side_width = int(side_aperture_deg * real_rays_per_degree)
 
-
-            
-
             # STEP 3: extract minimum distance from each section
             fw = max(1, real_front_width)
             front = scan[-fw:] + scan[:fw]
             valid_front = [v for v in front if v > 0.145]
             d_front = min(valid_front) if valid_front else 0.145
-     
+
             idx_left = int(n / 4)
             left = scan[idx_left - real_side_width : idx_left + real_side_width + 1]
             valid_left = [v for v in left if v > 0.145]
             d_left = min(valid_left) if valid_left else 0.145
-       
-            
+
             idx_right = int(3 * n / 4)
             right = scan[idx_right - real_side_width : idx_right + real_side_width + 1]
             valid_right = [v for v in right if v > 0.145]
             d_right = min(valid_right) if valid_right else 0.145
-         
-
 
             return d_front, d_left, d_right
 
@@ -210,33 +202,46 @@ class WallFollower:
         # -> enter (from FOLLOW_WALL): don't have a wall thats close enigh to follow
         # <- leave (TO FOLLOW_WALL): found a wall to follow
         if self._state == State.MOVE_AHEAD:
-            
-            if d_front < enter_turn_distance:
-                # decide which side to turn to
-                if self._side_sign == 1:
-                    self._state = State.TURN_LEFT
-                elif self._side_sign == -1:
-                    self._state = State.TURN_RIGHT
+            if self._simulation:
+                # is there a wall close enough to follow?
+                if d_left < exit_move_ahead_distance or d_right < exit_move_ahead_distance:
+                    # check which wall is closer
+                    if d_left > d_right:
+                        self._side_sign = 1
+                        if self._logger:
+                            self._logger.info("Wall found on the RIGHT. Switching to FOLLOW_WALL.")
+                    else:
+                        self._side_sign = -1
+                        if self._logger:
+                            self._logger.info("Wall found on the LEFT. Switching to FOLLOW_WALL.")
+                    self._state = State.FOLLOW_WALL
+                    self._prev_error = 0.0
+            else:
+                if d_front < enter_turn_distance:
+                    # decide which side to turn to
+                    if self._side_sign == 1:
+                        self._state = State.TURN_LEFT
+                    elif self._side_sign == -1:
+                        self._state = State.TURN_RIGHT
 
-                if self._logger:
-                    self._logger.info(
-                        f"Frontal obstacle detected at {d_front:.2f}m. Executing CORNER maneuver."
-                    )
-
-
-            # is there a wall close enough to follow?
-            elif d_left < exit_move_ahead_distance or d_right < exit_move_ahead_distance:
-                # check which wall is closer
-                if d_left > d_right:
-                    self._side_sign = 1
                     if self._logger:
-                        self._logger.info("Wall found on the RIGHT. Switching to FOLLOW_WALL.")
-                else:
-                    self._side_sign = -1
-                    if self._logger:
-                        self._logger.info("Wall found on the LEFT. Switching to FOLLOW_WALL.")
-                self._state = State.FOLLOW_WALL
-                self._prev_error = 0.0
+                        self._logger.info(
+                            f"Frontal obstacle detected at {d_front:.2f}m. Executing CORNER maneuver."
+                        )
+
+                # is there a wall close enough to follow?
+                elif d_left < exit_move_ahead_distance or d_right < exit_move_ahead_distance:
+                    # check which wall is closer
+                    if d_left > d_right:
+                        self._side_sign = 1
+                        if self._logger:
+                            self._logger.info("Wall found on the RIGHT. Switching to FOLLOW_WALL.")
+                    else:
+                        self._side_sign = -1
+                        if self._logger:
+                            self._logger.info("Wall found on the LEFT. Switching to FOLLOW_WALL.")
+                    self._state = State.FOLLOW_WALL
+                    self._prev_error = 0.0
 
         # STATE FOLLOW_WALL:
         # -> enter (from MOVE_AHEAD): there is a wall close enough to follow
@@ -285,9 +290,7 @@ class WallFollower:
                         f"Front cleared ({d_front:.2f}m). Maneuver complete. Switching to MOVE_AHEAD."
                     )
 
-    def _compute_actions_based_on_state(
-        self,
-    ) -> tuple[float, float]:
+    def _compute_actions_based_on_state(self) -> tuple[float, float]:
 
         v = 0.0
         w = 0.0

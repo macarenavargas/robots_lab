@@ -168,77 +168,7 @@ class ParticleFilter:
 
         return localized, pose
 
-    def check_likelihood(
-        self,
-        pose: tuple[float, float, float],
-        measurements: list[float],
-        error_threshold: float = 0.2,
-    ) -> bool:
-        """
-        Detects false convergence or captured robot measuring the discrepancy 
-        of the average likelihood, as indicated in the statement.
-
-        Args:
-            pose: estimated pose that we want to evaluate
-            measurements: real lidar measurements 
-            expected_likelihood : mean likelihood obtained when the robot converges well (To be calibrated empirically).
-            tolerance: % of fall allowed before considering that there is too much discrepancy(ej. 0.5 = 50%).
-        """
-
-        if math.isinf(pose[0]):
-            return False
-
-        # 1. Extract the real measurements of the lidar in this pose 
-        z_real = self._extract_robust_measurements(measurements)
-
-        # 2. Estimate the measuremetns that the robot SHOULD have in this pose for this map
-        z_simulated = self._sense(pose)
-        z_simulated = np.nan_to_num(z_simulated, nan=self._sensor_range_min)
-
-        # 3. Mean likelihood of the sensor measurements
-        errors = []
-
-        for i in range(self._num_rays):
-            errors.append(abs(z_real[i] - z_simulated[i]))
-
-        mean_error = np.mean(errors)
-
-        if self._logger:
-            self._logger.info(f"Mean error: {mean_error:.3f}")
-
-
-        # 4. Check if the average likelihood is significantly lower than the expected one, 
-        # which could indicate that the robot is lost or has been captured by a wrong cluster.
-        if mean_error > error_threshold:
-            if self._logger:
-                self._logger.error(
-                    f"  THE ROBOT IS LOST "
-                    f"({mean_error:.2f} is superior to {error_threshold:.2f}). "
-                    f"Reloading the particle filter . . ."
-                )
-
-
-            # 5. Solution -> re-load the filter. 
-            self._particles = self._init_particles(
-                self._initial_particle_count,
-                global_localization=True,
-                initial_pose=(0.0, 0.0, 0.0),
-                initial_pose_sigma=(0.0, 0.0, 0.0),
-            )
-            self._particle_count = self._initial_particle_count
-
-            return False
-
-        # The pose is valid, then its localized well. continue ! 
-        else : 
-            if self._logger:
-                self._logger.error(
-                    f"  THE ROBOT IS WELL LOCALIZED  "
-                    f"({mean_error:.2f} is superior to the expected {error_threshold:.2f}). "
-
-                )
-
-        return True
+    
 
     def move(self, v: float, w: float) -> None:
         """Performs a motion update on the particles.
