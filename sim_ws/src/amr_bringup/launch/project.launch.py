@@ -16,8 +16,8 @@ def generate_launch_description():
     f = (-1, 0.6, math.radians(0))
     # start = (-1.0, -1.0, math.radians(90))
     # goal = (-0.6, 1.0)
-    start = b
-    goal = (c[0], c[1])
+    start = e
+    goal = (f[0], f[1])
 
     particle_filter_node = LifecycleNode(
         package="amr_localization",

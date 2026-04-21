@@ -82,6 +82,21 @@ class PurePursuitNode(LifecycleNode):
             )
 
 
+
+            self._scan = None 
+            self._turn = False
+            qos_profile = QoSProfile(
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=10,
+                reliability=QoSReliabilityPolicy.BEST_EFFORT,
+                durability=QoSDurabilityPolicy.VOLATILE,
+                )
+            
+            self._subscriber_scan = self.create_subscription(
+                LaserScan, "/scan", self._scan_callback, qos_profile=qos_profile
+            )
+
+
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR
@@ -198,6 +213,63 @@ class PurePursuitNode(LifecycleNode):
             msg.linear.x = v
             msg.angular.z = w
         self._publisher.publish(msg)
+
+    
+      # create a callback for the laser scan to avoid obstacles
+    def _scan_callback(self, scan_msg: LaserScan):
+        self._scan = list(scan_msg.ranges)
+    
+
+    # copied function from wall follower. 
+    def _clean_lidar_data(self, z_scan: list[float]) -> list[float]:
+        safe_value = 0.9 * 0.16
+        return [
+            r if not (math.isnan(r) or math.isinf(r) or r <= 0.0) else safe_value
+            for r in z_scan
+        ]
+    
+    # copied function from wall follower.
+    def _get_sensor_readings(self, scan: list[float]) -> tuple[float, float, float]:
+        SIM_TOTAL_RAYS = 240.0
+        SIM_DEGREES_PER_RAY = 360.0 / SIM_TOTAL_RAYS
+
+        sim_front_rays_half = 20
+        sim_side_rays_half = 10
+
+        if self._simulation:
+            d_front = min(scan[-sim_front_rays_half:] + scan[:sim_front_rays_half])
+
+            idx_left = int(SIM_TOTAL_RAYS / 4)
+            d_left = min(scan[idx_left - sim_side_rays_half : idx_left + sim_side_rays_half + 1])
+
+            idx_right = int(3 * SIM_TOTAL_RAYS / 4)
+            d_right = min(scan[idx_right - sim_side_rays_half : idx_right + sim_side_rays_half + 1])
+
+            return d_front, d_left, d_right
+
+        else:
+            n = len(scan)
+            if n == 0:
+                return 8.0, 8.0, 8.0
+
+            front_aperture_deg = sim_front_rays_half * SIM_DEGREES_PER_RAY
+            side_aperture_deg = sim_side_rays_half * SIM_DEGREES_PER_RAY
+
+            real_rays_per_degree = n / 360.0
+            real_front_width = int(front_aperture_deg * real_rays_per_degree)
+            real_side_width = int(side_aperture_deg * real_rays_per_degree)
+
+            fw = max(1, real_front_width)
+            d_front = min(scan[-fw:] + scan[:fw])
+
+            idx_left = int(n / 4)
+            d_left = min(scan[idx_left - real_side_width : idx_left + real_side_width + 1])
+
+            idx_right = int(3 * n / 4)
+            d_right = min(scan[idx_right - real_side_width : idx_right + real_side_width + 1])
+
+            return d_front, d_left, d_right
+    
 
     
 def main(args=None):
